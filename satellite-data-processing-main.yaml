@@ -7,6 +7,14 @@
   vars_files: defaults.yml
   
   tasks:
+  - name: Install required packages (Ubuntu)
+    apt:
+      name:
+        - uidmap
+      state: latest
+    when: ansible_distribution == 'Ubuntu'
+
+
   - name: Print selected satellite data processing chain
     debug:
       msg: "Processing selected: {{ satellite_data_type }}"
