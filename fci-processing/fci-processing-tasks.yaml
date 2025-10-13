@@ -6,6 +6,7 @@
   package:
     name: podman
     state: latest
+  when: (ignore_packages is not defined or not (ignore_packages | bool))
 
 - name: show podman version
   shell: podman --version
@@ -28,46 +29,49 @@
   package:
     name: uidmap
     state: latest
-  when: ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '22.04'
+  when: (ignore_packages is not defined or not (ignore_packages | bool)) and (ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '22.04')
 
 - name: Install the latest version of slirp4netns
   package:
     name: slirp4netns
     state: latest
+  when: (ignore_packages is not defined or not (ignore_packages | bool))
 
 - name: Create install directory
   file:
     path: "{{ install_dir }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 - name: Create input directory
   file:
     path: "{{ input_dir }}"
     state: directory
-    mode: '0777'
+    mode: "0777"
 
 - name: Set up cleaning of input directory
   cron:
     name: "Clean up input data directory"
     minute: "*/10"
     job: "cd {{ input_dir }}; find . -type f -mmin +120 -delete"
+  when: (ignore_cleaning is not defined or not (ignore_cleaning | bool))
 
 - name: Create output directory
   file:
     path: "{{ output_dir }}"
     state: directory
-    mode: '0777'
+    mode: "0777"
 
 - name: Set up cleaning of output directory
   cron:
     name: "Clean up output data directory"
     minute: "15"
     job: "cd {{ output_dir }}; find . -type f -mtime +3 -delete"
+  when: (ignore_cleaning is not defined or not (ignore_cleaning | bool))
 
 - name: Update the trollflow2 configuration
   git:
-    repo: https://github.com/nordsat/ewc-config.git
+    repo: "{{ config_repo }}"
     dest: "{{ install_dir }}"
   register: git_config_results
   failed_when:
@@ -86,86 +90,89 @@
     name: pytroll_network
 
 ## Trollstalker
+- name: Run trollstalker
+  when: message_source == "tcp://trollstalker-fci:10000"
+  block:
+    - name: copy the trollstalker configuration
+      copy:
+        src: trollstalker.ini
+        dest: "{{ install_dir }}/config_fci_nc"
+      register: trollstalker_config_results
 
-- name: copy the trollstalker configuration
-  copy:
-    src: trollstalker.ini
-    dest: "{{ install_dir }}/config_fci_nc"
-  register: trollstalker_config_results
+    - name: Pull the trollstalker image
+      containers.podman.podman_image:
+        name: "{{ docker_repo}}trollstalker:main"
+      register: trollstalker_image
 
-- name: Pull the trollstalker image
-  containers.podman.podman_image:
-    name: docker.io/mraspaud/trollstalker:main
-  register: trollstalker_image
+    - name: Print if container should be restarted
+      ansible.builtin.debug:
+        msg: "{{ (trollstalker_config_results.changed or trollstalker_image.changed) | bool }}"
 
-- name: Print if container should be restarted
-  ansible.builtin.debug:
-    msg: "{{ (trollstalker_config_results.changed or trollstalker_image.changed) | bool }}"
+    - name: Restart the trollstalker (Ubuntu >= 24.04)
+      containers.podman.podman_container:
+        name: trollstalker-fci
+        image: "{{ docker_repo }}trollstalker:main"
+        state: started
+        # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
+        force_restart: "{{ (trollstalker_config_results.changed or trollstalker_image.changed) | bool }}"
+        mount:
+          - "type=bind,source={{ install_dir }}/config_fci_nc,target=/config/"
+          - "type=bind,source={{ input_dir }},target=/mnt/input/"
+        rm: true
+        network: pytroll_network
+        log_opt:
+          max_size: 10mb
+      when: not (ansible_distribution == "Ubuntu" and ansible_distribution_version == "22.04")
 
-- name: Restart the trollstalker (Ubuntu >= 24.04)
-  containers.podman.podman_container:
-    name: trollstalker-fci
-    image: docker.io/mraspaud/trollstalker:main
-    state: started
-    # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
-    force_restart: "{{ (trollstalker_config_results.changed or trollstalker_image.changed) | bool }}"
-    mount:
-      - "type=bind,source={{ install_dir }}/config_fci_nc,target=/config/"
-      - "type=bind,source={{ input_dir }},target=/mnt/input/"
-    rm: true
-    network: pytroll_network
-    log_opt:
-      max_size: 10mb
-  when: not (ansible_distribution == "Ubuntu" and ansible_distribution_version == "22.04")
-
-- name: Restart the trollstalker (Ubuntu 22.04)
-  containers.podman.podman_container:
-    name: trollstalker-fci
-    image: docker.io/mraspaud/trollstalker:main
-    state: started
-    # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
-    force_restart: "{{ (trollstalker_config_results.changed or trollstalker_image.changed) | bool }}"
-    volumes:
-      - "{{ install_dir }}/config_fci_nc:/config/"
-      - "{{ input_dir }}:/mnt/input/"
-    rm: true
-    network: pytroll_network
-    log_opt:
-      max_size: 10mb
-  when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
+    - name: Restart the trollstalker (Ubuntu 22.04)
+      containers.podman.podman_container:
+        name: trollstalker-fci
+        image: "{{ docker_repo }}trollstalker:main"
+        state: started
+        # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
+        force_restart: "{{ (trollstalker_config_results.changed or trollstalker_image.changed) | bool }}"
+        volumes:
+          - "{{ install_dir }}/config_fci_nc:/config/"
+          - "{{ input_dir }}:/mnt/input/"
+        rm: true
+        network: pytroll_network
+        log_opt:
+          max_size: 10mb
+      when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
 
 ## Segment Gatherer
-
-- name: copy the segment-gatherer configuration
-  copy:
-    src: segment_gatherer.yaml
-    dest: "{{ install_dir }}/config_fci_nc"
+- name: template the segment-gatherer configuration
+  template:
+    src: segment_gatherer.yaml.j2
+    dest: "{{ install_dir }}/config_fci_nc/segment_gatherer.yaml"
   register: segment_gatherer_config_results
 
 - name: Pull the segment-gatherer image
   containers.podman.podman_image:
-    name: docker.io/mraspaud/segment-gatherer:main
+    name: "{{ docker_repo }}segment-gatherer:main"
   register: segment_gatherer_image
 
 - name: Restart the segment-gatherer (Ubuntu 24.04)
   containers.podman.podman_container:
     name: segment-gatherer-fci
-    image: docker.io/mraspaud/segment-gatherer:main
+    image: "{{ docker_repo }}segment-gatherer:main"
     state: started
     # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
     force_restart: "{{ segment_gatherer_config_results.changed or segment_gatherer_image.changed }}"
-    mount:
-      - "type=bind,source={{ install_dir }}/config_fci_nc/,target=/config/"
+    volumes:
+      - "{{ install_dir }}/config_fci_nc/:/config/:z"
     rm: true
     network: pytroll_network
     log_opt:
       max_size: 10mb
+    userns: keep-id
+    dns_search: "{{ dns_domain }}"
   when: not (ansible_distribution == "Ubuntu" and ansible_distribution_version == "22.04")
 
 - name: Restart the segment-gatherer (Ubuntu >= 24.04)
   containers.podman.podman_container:
     name: segment-gatherer-fci
-    image: docker.io/mraspaud/segment-gatherer:main
+    image: "{{ docker_repo }}segment-gatherer:main"
     state: started
     # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
     force_restart: "{{ segment_gatherer_config_results.changed or segment_gatherer_image.changed }}"
@@ -175,6 +182,8 @@
     network: pytroll_network
     log_opt:
       max_size: 10mb
+    userns: keep-id
+    dns_search: "{{ dns_domain }}"
   when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
 
 ## Trollflow2
@@ -183,26 +192,28 @@
   file:
     path: "{{ install_dir }}/local/"
     state: directory
-    mode: '0777'
+    mode: "0777"
 
 - name: Pull the trollflow2 image
   containers.podman.podman_image:
-    name: docker.io/mraspaud/trollflow2:main
+    name: "{{ docker_repo}}trollflow2:main"
     force: true
   register: trollflow2_image
 
 - name: Restart trollflow2 (Ubuntu >= 24.04)
+  vars:
+    volumes:
+      - "{{ install_dir }}/config_fci_nc/:/config/:z"
+      - "{{ input_dir }}:/mnt/input/:z"
+      - "{{ output_dir }}:/mnt/output/:z"
+      - "{{ install_dir }}/local/:/.local/:z"
   containers.podman.podman_container:
     name: trollflow2-fci
-    image: docker.io/mraspaud/trollflow2:main
+    image: "{{ docker_repo}}trollflow2:main"
     state: started
     # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
     force_restart: "{{ trollflow2_image.changed or git_config_results.changed or environment_config_results.changed }}"
-    mount:
-      - "type=bind,source={{ install_dir }}/config_fci_nc/,target=/config/"
-      - "type=bind,source={{ input_dir }},target=/mnt/input/"
-      - "type=bind,source={{ output_dir }},target=/mnt/output/"
-      - "type=bind,source={{ install_dir }}/local/,target=/.local/"
+    volumes: "{{ volumes + [extra_volume] if (extra_volume is defined) else volumes }}"
     rm: true
     network: pytroll_network
     log_opt:
@@ -210,20 +221,24 @@
     env:
       GDAL_NUM_THREADS: "ALL_CPUS"
       NUM_THREADS: "ALL_CPUS"
+    user: 0
+    dns_search: "{{ dns_domain }}"
   when: not (ansible_distribution == "Ubuntu" and ansible_distribution_version == "22.04")
 
 - name: Restart trollflow2 (Ubuntu 22.04)
+  vars:
+    volumes:
+      - "{{ install_dir }}/config_fci_nc/:/config/:z"
+      - "{{ input_dir }}:/mnt/input/:z"
+      - "{{ output_dir }}:/mnt/output/:z"
+      - "{{ install_dir }}/local/:/.local/:z"
   containers.podman.podman_container:
     name: trollflow2-fci
-    image: docker.io/mraspaud/trollflow2:main
+    image: "{{ docker_repo}}trollflow2:main"
     state: started
     # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
     force_restart: "{{ trollflow2_image.changed or git_config_results.changed or environment_config_results.changed }}"
-    volumes:
-      - "{{ install_dir }}/config_fci_nc/:/config/"
-      - "{{ input_dir }}:/mnt/input/"
-      - "{{ output_dir }}:/mnt/output/"
-      - "{{ install_dir }}/local/:/.local/"
+    volumes: "{{ volumes + [extra_volume] if (extra_volume is defined) else volumes }}"
     rm: true
     network: pytroll_network
     log_opt:
@@ -231,4 +246,6 @@
     env:
       GDAL_NUM_THREADS: "ALL_CPUS"
       NUM_THREADS: "ALL_CPUS"
+    user: 0
+    dns_search: "{{ dns_domain }}"
   when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
