@@ -1,42 +1,4 @@
 ---
-- name: Include vars
-  ansible.builtin.include_vars: vars.yaml
-
-- name: Install the latest version of podman
-  package:
-    name: podman
-    state: latest
-  when: (ignore_packages is not defined or not (ignore_packages | bool))
-
-- name: show podman version
-  shell: podman --version
-
-- name: bug fix for ubuntu 22 https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394
-  shell: curl -O http://archive.ubuntu.com/ubuntu/pool/universe/g/golang-github-containernetworking-plugins/containernetworking-plugins_1.1.1+ds1-3build1_amd64.deb
-  when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
-
-- name: bug fix for ubuntu 22 https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394 part 2
-  shell: dpkg -i containernetworking-plugins_1.1.1+ds1-3build1_amd64.deb
-  when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
-
-- name: Install the latest version of aardvark-dns
-  package:
-    name: aardvark-dns
-    state: latest
-  when: ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '24.04'
-
-- name: Install the latest version of uidmap
-  package:
-    name: uidmap
-    state: latest
-  when: (ignore_packages is not defined or not (ignore_packages | bool)) and (ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '22.04')
-
-- name: Install the latest version of slirp4netns
-  package:
-    name: slirp4netns
-    state: latest
-  when: (ignore_packages is not defined or not (ignore_packages | bool))
-
 - name: Create install directory
   file:
     path: "{{ install_dir }}"
@@ -83,11 +45,6 @@
     src: env-variables
     dest: "{{ install_dir }}/config_fci_nc"
   register: environment_config_results
-
-## pre-requisite for containers
-- name: Create a podman network
-  containers.podman.podman_network:
-    name: pytroll_network
 
 ## Trollstalker
 - name: Run trollstalker
@@ -213,7 +170,7 @@
     state: started
     # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
     force_restart: "{{ trollflow2_image.changed or git_config_results.changed or environment_config_results.changed }}"
-    volumes: "{{ volumes + [extra_volume] if (extra_volume is defined) else volumes }}"
+    volumes: "{{ volumes + [extra_trollflow2_volume] if (extra_trollflow2_volume is defined) else volumes }}"
     rm: true
     network: pytroll_network
     log_opt:
@@ -238,7 +195,7 @@
     state: started
     # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
     force_restart: "{{ trollflow2_image.changed or git_config_results.changed or environment_config_results.changed }}"
-    volumes: "{{ volumes + [extra_volume] if (extra_volume is defined) else volumes }}"
+    volumes: "{{ volumes + [extra_trollflow2_volume] if (extra_trollflow2_volume is defined) else volumes }}"
     rm: true
     network: pytroll_network
     log_opt:

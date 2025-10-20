@@ -6,6 +6,8 @@
     - vars.yaml
 
   tasks:
+    - name: base
+      include_tasks: fci-base-tasks.yaml
+
     - name: processing FCI
       include_tasks: fci-processing-tasks.yaml
-
