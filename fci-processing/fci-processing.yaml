@@ -11,3 +11,7 @@
 
     - name: processing FCI
       include_tasks: fci-processing-tasks.yaml
+
+    - name: dispatching FCI
+      include_tasks: fci-dispatching-tasks.yaml
+      when: (enable_dispatch is defined and (enable_dispatch | bool))
