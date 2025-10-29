@@ -2,8 +2,8 @@ patterns:
   fdhsi_nc:
     pattern: "{pflag}_{location_indicator},{data_designator},MTI{spacecraft_id:1d}+{data_source}-1C-RRAD-FDHSI-{coverage}-{subsetting}-{component1}-BODY-{component3}-{purpose}-{format}_{oflag}_{originator}_{processing_time:%Y%m%d%H%M%S}_{facility_or_tool}_{environment}_{start_time:%Y%m%d%H%M%S}_{end_time:%Y%m%d%H%M%S}_{processing_mode}_{special_compression}_{disposition_mode}_{repeat_cycle_in_day:>04d}_{segment}.nc"
     critical_files:
-    wanted_files: :0029-0040
-    all_files: :0029-0040
+    wanted_files: :0028-0040
+    all_files: :0028-0040
     variable_tags: ["processing_time", "end_time", "start_time"]
     group_by_minutes: 10
     time_tolerance: 600
@@ -12,8 +12,8 @@ patterns:
   hrfi_nc:
     pattern: "{pflag}_{location_indicator},{data_designator},MTI{spacecraft_id:1d}+{data_source}-1C-RRAD-HRFI-{coverage}-{subsetting}-{component1}-BODY-{component3}-{purpose}-{format}_{oflag}_{originator}_{processing_time:%Y%m%d%H%M%S}_{facility_or_tool}_{environment}_{start_time:%Y%m%d%H%M%S}_{end_time:%Y%m%d%H%M%S}_{processing_mode}_{special_compression}_{disposition_mode}_{repeat_cycle_in_day:>04d}_{segment}.nc"
     critical_files:
-    wanted_files: :0029-0040
-    all_files: :0029-0040
+    wanted_files: :0028-0040
+    all_files: :0028-0040
     variable_tags: ["processing_time", "end_time", "start_time"]
     group_by_minutes: 10
     time_tolerance: 600

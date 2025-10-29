@@ -147,7 +147,7 @@
 
 - name: Create local pyspectral directory
   file:
-    path: "{{ install_dir }}/local/"
+    path: "{{ install_dir }}/local/share/"
     state: directory
     mode: "0777"
 
