@@ -103,3 +103,7 @@ You can override these defaults when running the playbook by using the `--extra-
 ```bash
 ansible-playbook -i inventory path/to/playbook/filename.yaml -e "satellite_data_type=seviri"
 ```
+
+## Operation
+Checkout the guidelines on how to work with data processing pipelines after successful playbook execution:
+* [How to configure the Pytroll satellite data processing pipeline](./docs/how-to/how-to-configure-the-satellite-data-processing-pipeline.md)
