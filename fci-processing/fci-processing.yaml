@@ -6,6 +6,12 @@
     - vars.yaml
 
   tasks:
+    - name: base
+      include_tasks: fci-base-tasks.yaml
+
     - name: processing FCI
       include_tasks: fci-processing-tasks.yaml
 
+    - name: dispatching FCI
+      include_tasks: fci-dispatching-tasks.yaml
+      when: (enable_dispatch is defined and (enable_dispatch | bool))
