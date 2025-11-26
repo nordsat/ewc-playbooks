@@ -1,0 +1,13 @@
+---
+- hosts: all
+  name: fci-dispaching
+
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: base
+      include_tasks: fci-base-tasks.yaml
+
+    - name: dispatching FCI
+      include_tasks: fci-dispatching-tasks.yaml
