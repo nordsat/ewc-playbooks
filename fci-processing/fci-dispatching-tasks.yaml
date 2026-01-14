@@ -1,0 +1,46 @@
+---
+- name: Create output directory
+  file:
+    path: "{{ output_dir }}"
+    state: directory
+    mode: "0777"
+
+- name: Update the configuration
+  git:
+    repo: "{{ config_repo }}"
+    dest: "{{ install_dir }}"
+  register: git_config_results
+  failed_when:
+    - git_config_results.failed
+    - not 'Local modifications exist in repository' in git_config_results.msg
+
+- name: copy the environment configuration
+  copy:
+    src: env-variables
+    dest: "{{ install_dir }}/config_fci_nc"
+  register: environment_config_results
+
+## Dispatcher
+- name: Pull the dispatcher image
+  containers.podman.podman_image:
+    name: "{{ docker_repo }}dispatcher:main"
+  register: dispatcher_image
+
+- name: Restart the dispatcher (Ubuntu 24.04)
+  vars:
+    volumes:
+      - "{{ output_dir }}:/mnt/output/:z"
+      - "{{ install_dir }}/config_fci_nc/dispatcher_config.yaml:/dispatcher/dispatcher_config.yaml:z"
+  containers.podman.podman_container:
+    name: dispatcher-fci
+    image: "{{ docker_repo }}dispatcher:main"
+    state: started
+    # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
+    force_restart: "{{ git_config_results.changed or dispatcher_image.changed }}"
+    volumes: "{{ volumes + dispatcher_volumes if (dispatcher_volumes is defined) else volumes }}"
+    rm: true
+    network: pytroll_network
+    log_opt:
+      max_size: 10mb
+    userns: keep-id
+    dns_search: "{{ dns_domain }}"

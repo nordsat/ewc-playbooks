@@ -1,2 +1,3 @@
 export MESSAGE_SOURCE=tcp://segment-gatherer-fci:10001
 export SATPY_CONFIG_PATH=/config/satpy
+export PSP_CONFIG_FILE=/config/pyspectral.yaml
