@@ -1,3 +1,7 @@
 install_dir: "{{ ansible_env.HOME }}/fci-processing"
 input_dir: /eodata/fci/
 output_dir: /eodata/fci_out/
+config_repo: https://github.com/nordsat/ewc-config.git
+docker_repo: docker.io/mraspaud/
+dns_domain: ""
+message_source: tcp://trollstalker-fci:10000
