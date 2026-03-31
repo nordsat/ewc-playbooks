@@ -33,7 +33,7 @@
   file:
     path: "{{ install_dir }}"
     state: directory
-    mode: '0777'
+    mode: "0777"
 
 # Install and run postgis
 
@@ -79,7 +79,7 @@
   file:
     path: "{{ map_dir }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 - name: Touch mapfile
   file:
@@ -127,7 +127,6 @@
     # rm: true
     network: pytroll_network
   register: dbsync_pod
-
 
 ## Install and run mapserver
 
