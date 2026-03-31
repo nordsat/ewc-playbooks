@@ -1,3 +1,7 @@
 export MESSAGE_SOURCE=tcp://segment-gatherer-fci:10001
 export SATPY_CONFIG_PATH=/config/satpy
 export PSP_CONFIG_FILE=/config/pyspectral.yaml
+export POSTTROLL_TCP_KEEPALIVE="1"
+export POSTTROLL_TCP_KEEPALIVE_CNT="10"
+export POSTTROLL_TCP_KEEPALIVE_IDLE="1"
+export POSTTROLL_KEEPALIVE_INTVL="1"
