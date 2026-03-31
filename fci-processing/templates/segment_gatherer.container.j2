@@ -1,0 +1,17 @@
+# vim: set filetype=systemd.jinja:
+[Unit]
+Description=Segment Gatherer Service
+
+[Container]
+Image={{ docker_repo }}segment-gatherer:main
+ContainerName=segment-gatherer-fci
+Network=pytroll.network
+Volume={{ install_dir }}/config_fci_nc/:/config/:z
+UserNS=keep-id
+DNSSearch={{ dns_domain }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
