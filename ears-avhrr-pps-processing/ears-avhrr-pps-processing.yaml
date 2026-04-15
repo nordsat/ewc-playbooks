@@ -1,0 +1,10 @@
+---
+- hosts: all
+  name: ears-avhrr-pps-processing
+
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: processing EARS AVHRR PPS
+      include_tasks: ears-avhrr-pps-processing-tasks.yaml

@@ -1,0 +1,162 @@
+---
+- name: Include vars
+  ansible.builtin.include_vars: vars.yaml
+
+- name: Install the latest version of podman
+  package:
+    name: podman
+    state: latest
+
+- name: show podman version
+  shell: podman --version
+
+- name: Install the latest version of aardvark-dns
+  package:
+    name: aardvark-dns
+    state: latest
+
+- name: Install the latest version of uidmap
+  package:
+    name: uidmap
+    state: latest
+
+- name: Install the latest version of slirp4netns
+  package:
+    name: slirp4netns
+    state: latest
+
+- name: Create install directory
+  file:
+    path: "{{ install_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Create input directory
+  file:
+    path: "{{ input_dir }}"
+    state: directory
+    mode: '0777'
+
+- name: Set up cleaning of input directory
+  cron:
+    name: "Clean up input data directory"
+    minute: "*/10"
+    job: "cd {{ input_dir }}; find . -type f -mmin +120 -delete"
+
+- name: Create output directory
+  file:
+    path: "{{ output_dir }}"
+    state: directory
+    mode: '0777'
+
+- name: Set up cleaning of output directory
+  cron:
+    name: "Clean up output data directory"
+    minute: "15"
+    job: "cd {{ output_dir }}; find . -type f -mtime +3 -delete"
+
+- name: Update the trollflow2 configuration
+  git:
+    repo: https://github.com/nordsat/ewc-config.git
+    dest: "{{ install_dir }}"
+  register: git_config_results
+  failed_when:
+    - git_config_results.failed
+    - not 'Local modifications exist in repository' in git_config_results.msg
+
+- name: Create local pyspectral directory
+  file:
+    path: "{{ install_dir }}/local/"
+    state: directory
+    mode: '0777'
+
+- name: copy the trollstalker configuration
+  copy:
+    src: trollstalker.ini
+    dest: "{{ install_dir }}/config_ears_avhrr_pps"
+  register: trollstalker_config_results
+
+- name: copy the segment-gatherer configuration
+  copy:
+    src: segment_gatherer.yaml
+    dest: "{{ install_dir }}/config_ears_avhrr_pps"
+  register: segment_gatherer_config_results
+
+- name: copy the environment configuration
+  copy:
+    src: env-variables
+    dest: "{{ install_dir }}/config_ears_avhrr_pps"
+  register: environment_config_results
+
+- name: Create a podman network
+  containers.podman.podman_network:
+    name: pytroll_network
+
+- name: Pull the trollstalker image
+  containers.podman.podman_image:
+    name: docker.io/mraspaud/trollstalker:main
+  register: trollstalker_image
+
+- name: Print if container should be restarted
+  ansible.builtin.debug:
+    msg: "{{ (trollstalker_config_results.changed or trollstalker_image.changed) | bool }}"
+
+- name: Restart the trollstalker
+  containers.podman.podman_container:
+    name: trollstalker-ears-avhrr-pps
+    image: docker.io/mraspaud/trollstalker:main
+    state: started
+    # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
+    force_restart: "{{ (trollstalker_config_results.changed or trollstalker_image.changed) | bool }}"
+    mount:
+      - "type=bind,source={{ install_dir }}/config_ears_avhrr_pps,target=/config"
+      - "type=bind,source={{ input_dir }},target=/mnt/input/"
+    rm: true
+    network: pytroll_network
+    log_opt:
+      max_size: 10mb
+
+- name: Pull the segment-gatherer image
+  containers.podman.podman_image:
+    name: docker.io/mraspaud/segment-gatherer:main
+  register: segment_gatherer_image
+
+- name: Restart the segment-gatherer
+  containers.podman.podman_container:
+    name: segment-gatherer-ears-avhrr-pps
+    image: docker.io/mraspaud/segment-gatherer:main
+    state: started
+    # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
+    force_restart: "{{ segment_gatherer_config_results.changed or segment_gatherer_image.changed }}"
+    mount:
+      - "type=bind,source={{ install_dir }}/config_ears_avhrr_pps/,target=/config/"
+    rm: true
+    network: pytroll_network
+    log_opt:
+      max_size: 10mb
+
+- name: Pull the trollflow2 image
+  containers.podman.podman_image:
+    name: docker.io/mraspaud/trollflow2:main
+    force: true
+  register: trollflow2_image
+
+- name: Restart trollflow2
+  containers.podman.podman_container:
+    name: trollflow2-ears-avhrr-pps
+    image: docker.io/mraspaud/trollflow2:main
+    state: started
+    # Does not have any effect because of https://github.com/containers/ansible-podman-collections/issues/355
+    #force_restart: "{{ trollflow2_image.changed or git_config_results.changed or environment_config_results.changed }}"
+    mount:
+      - "type=bind,source={{ install_dir }}/config_ears_avhrr_pps/,target=/config/"
+      - "type=bind,source={{ input_dir }},target=/mnt/input/"
+      - "type=bind,source={{ output_dir }},target=/mnt/output/"
+      - "type=bind,source={{ install_dir }}/local/,target=/.local/"
+    rm: true
+    network: pytroll_network
+    log_opt:
+      max_size: 10mb
+    env:
+      GDAL_NUM_THREADS: "ALL_CPUS"
+      NUM_THREADS: "ALL_CPUS"
