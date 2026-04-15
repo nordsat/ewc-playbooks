@@ -1,0 +1,111 @@
+---
+- name: Setup Rootless Pytroll Stack
+  hosts: all
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Check if user lingering is enabled
+      ansible.builtin.stat:
+        path: "/var/lib/systemd/linger/{{ ansible_user_id }}"
+      register: user_lingering
+
+    - name: Warn if lingering is disabled
+      ansible.builtin.debug:
+        msg: "WARNING: Lingering is disabled. Services will not start at boot or persist after logout. Run 'sudo loginctl enable-linger {{ ansible_user_id }}' if possible."
+      when: not user_lingering.stat.exists
+
+    - name: Install the latest version of podman
+      package:
+        name: podman
+        state: latest
+      when: (ignore_packages is not defined or not (ignore_packages | bool))
+
+    - name: show podman version
+      shell: podman --version
+
+    - name: bug fix for ubuntu 22 https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394
+      shell: curl -O http://archive.ubuntu.com/ubuntu/pool/universe/g/golang-github-containernetworking-plugins/containernetworking-plugins_1.1.1+ds1-3build1_amd64.deb
+      when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
+
+    - name: bug fix for ubuntu 22 https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394 part 2
+      shell: dpkg -i containernetworking-plugins_1.1.1+ds1-3build1_amd64.deb
+      when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
+
+    - name: Install the latest version of aardvark-dns
+      package:
+        name: aardvark-dns
+        state: latest
+      when: ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '24.04'
+
+    - name: Install the latest version of uidmap
+      package:
+        name: uidmap
+        state: latest
+      when: (ignore_packages is not defined or not (ignore_packages | bool)) and (ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '22.04')
+
+    - name: Install the latest version of slirp4netns
+      package:
+        name: slirp4netns
+        state: latest
+      when: (ignore_packages is not defined or not (ignore_packages | bool))
+
+    - name: Get UID of the become user
+      ansible.builtin.command: id -u
+      register: user_id_result
+      changed_when: false
+
+    - name: Ensure Quadlet directory exists
+      ansible.builtin.file:
+        path: "/etc/containers/systemd/users/{{ user_id_result.stdout }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create Quadlet network file
+      ansible.builtin.copy:
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/pytroll.network"
+        content: |
+          [Network]
+          NetworkName=pytroll_network
+      register: network_file
+
+    - name: Create Quadlet for Pytroll-watcher
+      template:
+        src: segment_gatherer.container.j2
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/pytroll-watcher-sar.container"
+      register: quad_segment
+
+    - name: Create Quadlet for Trollflow2
+      template:
+        src: trollflow2.container.j2
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/trollflow2-sar.container"
+      register: quad_trollflow
+
+    - name: Ensure the latest image is present
+      containers.podman.podman_image:
+        name: "{{ docker_repo }}{{ item }}"
+        force: yes # This forces a pull even if the tag is already present
+      loop:
+        - "pytroll-watcher:main"
+        - "trollflow2:main"
+      register: image_pull
+
+    - name: Reload systemd to apply changes
+      systemd:
+        scope: user
+        daemon_reload: yes
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
+      when: network_file.changed or quad_segment.changed or quad_trollflow.changed
+
+    - name: Ensure services are enabled and running
+      ansible.builtin.systemd:
+        scope: user
+        name: "{{ item }}.service"
+        state: started
+        enabled: yes
+      loop:
+        - pytroll-watcher-sar
+        - trollflow2-sar
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"

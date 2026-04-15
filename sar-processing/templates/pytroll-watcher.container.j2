@@ -1,0 +1,17 @@
+# vim: set filetype=systemd.jinja:
+[Unit]
+Description=Pytroll Watcher Service
+
+[Container]
+Image={{ docker_repo }}segment-gatherer:main
+ContainerName=pytroll-watcher-sar
+Network=pytroll.network
+Volume={{ install_dir }}/config_sar_grd/:/config/:z
+UserNS=keep-id
+DNSSearch={{ dns_domain }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,2 @@
+install_dir: "{{ ansible_env.HOME }}/sar-processing"
+output_dir: /eodata/sar_out/
