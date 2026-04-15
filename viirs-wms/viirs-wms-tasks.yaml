@@ -33,7 +33,7 @@
   file:
     path: "{{ install_dir }}"
     state: directory
-    mode: '0777'
+    mode: "0777"
 
 # Install and run postgis
 
@@ -71,6 +71,7 @@
       - pgpassword,type=env,target=POSTGRES_PASSWORD
     rm: true
     network: pytroll_network
+    publish: 5432:5432
   register: postgis_pod
 
 ## Install and run db-sync
@@ -79,7 +80,7 @@
   file:
     path: "{{ map_dir }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 - name: Touch mapfile
   file:
@@ -128,7 +129,6 @@
     # rm: true
     network: pytroll_network
   register: dbsync_pod
-
 
 ## Install and run mapserver
 
