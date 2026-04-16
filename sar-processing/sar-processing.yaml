@@ -114,7 +114,7 @@
         force: yes # This forces a pull even if the tag is already present
       loop:
         - "pytroll-watcher:main"
-        - "trollflow2:main"
+        - "trollflow2:main-uv-unstable"
       register: image_pull
 
     - name: Reload systemd to apply changes
