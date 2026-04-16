@@ -4,17 +4,11 @@ Description=Trollflow2 Service
 After=network-online.target
 
 [Container]
-Image={{ docker_repo }}trollflow2:main
+Image={{ docker_repo }}trollflow2:main-uv-unstable
 ContainerName=trollflow2-sar
 Network=pytroll.network
-# Standard Volumes
 Volume={{ install_dir }}/config_sar_grd/:/config/:z
 Volume={{ output_dir }}:/mnt/output/:z
-Volume={{ install_dir }}/local/:/.local/:z
-# Conditional Volume
-{% if extra_trollflow2_volume is defined %}
-Volume={{ extra_trollflow2_volume }}
-{% endif %}
 
 Environment=GDAL_NUM_THREADS=ALL_CPUS NUM_THREADS=ALL_CPUS
 User=0

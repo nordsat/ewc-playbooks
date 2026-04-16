@@ -3,12 +3,15 @@
 Description=Pytroll Watcher Service
 
 [Container]
-Image={{ docker_repo }}segment-gatherer:main
+Image={{ docker_repo }}pytroll-watcher:main
 ContainerName=pytroll-watcher-sar
 Network=pytroll.network
 Volume={{ install_dir }}/config_sar_grd/:/config/:z
 UserNS=keep-id
 DNSSearch={{ dns_domain }}
+Environment=AWS_CONFIG_FILE=/config/aws_config_file
+Secret=sar_netrc,target=/config/.netrc
+Secret=sar_aws,target=/config/aws_config_file
 
 [Service]
 Restart=always
