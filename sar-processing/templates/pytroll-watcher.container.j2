@@ -4,6 +4,7 @@ Description=Pytroll Watcher Service
 
 [Container]
 Image={{ docker_repo }}pytroll-watcher:main
+Pull=missing
 ContainerName=pytroll-watcher-sar
 Network=pytroll.network
 Volume={{ install_dir }}/config_sar_grd/:/config/:z

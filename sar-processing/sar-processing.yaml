@@ -84,7 +84,7 @@
 
     - name: Ensure Quadlet runtime directory exists
       ansible.builtin.file:
-        path: "/run/users/{{ user_id_result.stdout }}"
+        path: "/run/user/{{ user_id_result.stdout }}"
         state: directory
         mode: "0755"
 
@@ -94,13 +94,15 @@
         content: |
           [Network]
           NetworkName=pytroll_network
+          [Install]
+          WantedBy=default.target
       register: network_file
 
     - name: Create Quadlet for Pytroll-watcher
       template:
         src: pytroll-watcher.container.j2
         dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/pytroll-watcher-sar.container"
-      register: quad_segment
+      register: quad_watcher
 
     - name: Create Quadlet for Trollflow2
       template:
@@ -114,7 +116,7 @@
         force: yes # This forces a pull even if the tag is already present
       loop:
         - "pytroll-watcher:main"
-        - "trollflow2:main-uv-unstable"
+        - "trollflow2:main-mamba-unstable"
       register: image_pull
 
     - name: Reload systemd to apply changes
@@ -123,7 +125,7 @@
         daemon_reload: yes
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
-      when: network_file.changed or quad_segment.changed or quad_trollflow.changed
+      when: network_file.changed or quad_watcher.changed or quad_trollflow.changed
 
     - name: Ensure services are enabled and running
       ansible.builtin.systemd:
@@ -132,6 +134,7 @@
         state: started
         enabled: yes
       loop:
+        - pytroll-network
         - pytroll-watcher-sar
         - trollflow2-sar
       environment:
