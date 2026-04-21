@@ -1,0 +1,22 @@
+# vim: set filetype=systemd.jinja:
+[Unit]
+Description=db-push Service for SAR S-1
+After=network-online.target
+
+[Container]
+Image={{ docker_repo }}db-push:main
+Pull=missing
+ContainerName=db-push-sar
+Network=pytroll.network
+Volume={{ output_dir }}:/mnt/output/:z
+Volume={{ install_dir }}/config/config_sar_grd/trollflow2.yaml:/etc/trollflow2.yaml:z
+Volume={{ install_dir }}/db-push.yaml:/config/db-push.yaml:z
+Secret=pgpassword,type=env,target=PGPASSWORD
+User=0
+DNSSearch={{ dns_domain }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
