@@ -1,0 +1,28 @@
+# vim: set filetype=systemd.jinja:
+[Unit]
+Description=Postgis Service
+After=network-online.target
+
+[Container]
+Image=docker.io/postgis/postgis:latest
+Pull=missing
+ContainerName=postgis-sar
+Network=pytroll.network
+Volume={{ install_dir }}/pg-data/:/var/lib/postgresql/data:z
+Volume={{ install_dir }}/init.sql:/docker-entrypoint-initdb.d/init.sql:z
+Secret=pgpassword,type=env,target=POSTGRES_PASSWORD
+PublishPort=5432:5432
+
+User=0
+DNSSearch={{ dns_domain }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
+
+
+      {#   rm: true #}
+      {#   publish: 5432:5432 #}
+      {# register: postgis_pod #}
