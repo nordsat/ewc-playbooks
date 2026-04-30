@@ -1,0 +1,12 @@
+---
+pg_table_name: {{ pg_table_name }}
+pg_user_name: postgres
+pg_database_name: postgres
+pg_host_name: postgis-sar
+host_name: postgis-sar
+time_slot_interval_in_minutes: list
+
+subscriber_settings:
+  nameserver: false
+  addresses:
+    - tcp://trollflow2-sar:10009

@@ -1,0 +1,25 @@
+# vim: set filetype=systemd.jinja:
+[Unit]
+Description=Trollflow2 Service for SAR S-1
+After=network-online.target
+
+[Container]
+Image={{ docker_repo }}trollflow2:main-uv-unstable
+Pull=missing
+ContainerName=trollflow2-sar
+Network=pytroll.network
+Volume={{ install_dir }}/config_sar_grd/:/config/:z
+Volume={{ output_dir }}:/mnt/output/:z
+Environment=AWS_CONFIG_FILE=/config/aws_config_file
+Environment=GDAL_NUM_THREADS=ALL_CPUS
+Environment=NUM_THREADS=ALL_CPUS
+Secret=sar_aws,target=/config/aws_config_file
+
+User=0
+DNSSearch={{ dns_domain }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
