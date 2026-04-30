@@ -125,7 +125,19 @@
         daemon_reload: yes
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
-      when: network_file.changed or quad_watcher.changed or quad_trollflow.changed
+      when: network_file.changed or quad_watcher.changed or quad_trollflow.changed or image_pull.changed
+
+    - name: Restart services when image changed
+      ansible.builtin.systemd:
+        scope: user
+        name: "{{ item }}.service"
+        state: restarted
+      loop:
+        - pytroll-watcher-sar
+        - trollflow2-sar
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
+      when: image_pull.changed
 
     - name: Ensure services are enabled and running
       ansible.builtin.systemd:

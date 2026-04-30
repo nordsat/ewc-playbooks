@@ -5,7 +5,7 @@ After=network-online.target
 
 [Container]
 Image={{ docker_repo }}trollflow2:main-uv-unstable
-Pull=missing
+Pull=never
 ContainerName=trollflow2-sar
 Network=pytroll.network
 Volume={{ install_dir }}/config_sar_grd/:/config/:z
