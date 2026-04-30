@@ -1,0 +1,97 @@
+name: Deployment Test on EUMETSAT
+
+on:
+  workflow_dispatch:
+    inputs:
+      osExternalNetworkName:
+        required: true
+        default: 'external'
+
+      osPrivateNetworkName:
+        required: true
+        default: 'private'
+
+      osSecurityGroupName:
+        required: true
+        default: 'ssh'
+
+      osKeypairName:
+        required: true
+        default: 'github-keypair'
+
+      osFlavorName:
+        required: true
+        default: 'eo1.large'
+
+      osImageName:
+        required: true
+        default: 'Rocky-9.6-20251107141503'
+
+      instanceNamePrefix:
+        required: true
+        default: 'github'
+
+      pythonVersion:
+        required: true
+        default: '3.10.19'
+
+      ansibleVersion:
+        required: true
+        default: '10.7.0'
+
+      ansibleUser:
+        required: true
+        default: 'cloud-user'
+
+      pathToMainFile:
+        required: true
+        default: 'satellite-data-processing-main.yaml'
+
+      pathToRequirementsFile:
+        required: false
+
+      inputSpecJson:
+        required: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Test deployment
+        id: test-deployment
+        uses: ewcloud/ewc-gh-action-test-deploy-ansible-playbook@v2
+        with:
+          osAuthUrl: '${{ secrets.OS_AUTH_URL }}'
+          osRegionName: '${{ secrets.OS_REGION_NAME }}'
+          osApplicationCredentialId: '${{ secrets.OS_APPLICATION_CREDENTIAL_ID }}'
+          osApplicationCredentialSecret: '${{ secrets.OS_APPLICATION_CREDENTIAL_SECRET }}'
+          osExternalNetworkName: '${{ inputs.osExternalNetworkName }}'
+          osPrivateNetworkName: '${{ inputs.osPrivateNetworkName }}'
+          osSecurityGroupName: '${{ inputs.osSecurityGroupName }}'
+          osKeypairName: '${{ inputs.osKeypairName }}'
+          osFlavorName: '${{ inputs.osFlavorName }}'
+          osImageName: '${{ inputs.osImageName }}'
+          instanceNamePrefix: '${{ inputs.instanceNamePrefix }}'
+          ansibleSshPrivateKey: '${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}'
+          pythonVersion: '${{ inputs.pythonVersion }}'
+          ansibleVersion: '${{ inputs.ansibleVersion }}'
+          ansibleUser: '${{ inputs.ansibleUser }}'
+          pathToMainFile: '${{ inputs.pathToMainFile }}'
+          pathToRequirementsFile: '${{ inputs.pathToRequirementsFile }}'
+          inputSpecJson: '${{ inputs.inputSpecJson }}'
+
+      - name: Upload test deployment results
+        uses: actions/upload-artifact@v6
+        if: ${{ always() }}
+        with:
+          name: artifacts_${{ github.run_id }}
+          path: ${{ steps.test-deployment.outputs.artifactPath }}
+          retention-days: 90
