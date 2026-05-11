@@ -55,6 +55,27 @@
       register: user_id_result
       changed_when: false
 
+    - name: Update the trollflow2 configuration
+      git:
+        repo: "{{ config_repo }}"
+        dest: "{{ install_dir }}"
+      register: git_config_results
+      failed_when:
+        - git_config_results.failed
+        - not 'Local modifications exist in repository' in git_config_results.msg
+
+    - name: copy the environment configuration
+      copy:
+        src: env-variables
+        dest: "{{ install_dir }}/config_fci_nc"
+      register: environment_config_results
+
+    - name: Ensure output directory exists
+      ansible.builtin.file:
+        path: "{{ output_dir }}"
+        state: directory
+        mode: "0755"
+
     - name: Ensure Quadlet directory exists
       ansible.builtin.file:
         path: "/etc/containers/systemd/users/{{ user_id_result.stdout }}"
@@ -87,7 +108,7 @@
         force: yes # This forces a pull even if the tag is already present
       loop:
         - "segment-gatherer:main"
-        - "trollflow2:main"
+        - "trollflow2:main-mamba"
       register: image_pull
 
     - name: Reload systemd to apply changes
