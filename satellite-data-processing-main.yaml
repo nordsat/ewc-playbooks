@@ -11,6 +11,10 @@
     debug:
       msg: "Processing selected: {{ satellite_data_type }}"
 
+  - name: processing FCI (base tasks)
+    include_tasks: fci-processing/fci-base-tasks.yaml
+    when: satellite_data_type == 'fci'
+
   - name: processing FCI
     include_tasks: fci-processing/fci-processing-tasks.yaml
     when: satellite_data_type == 'fci'

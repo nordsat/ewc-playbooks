@@ -1,4 +1,7 @@
 ---
+- name: Include vars
+  ansible.builtin.include_vars: vars.yaml
+
 - name: Create install directory
   file:
     path: "{{ install_dir }}"
