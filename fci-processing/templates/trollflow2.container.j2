@@ -4,7 +4,8 @@ Description=Trollflow2 Service
 After=network-online.target
 
 [Container]
-Image={{ docker_repo }}trollflow2:main
+Image={{ docker_repo }}trollflow2:main-mamba
+Pull=never
 ContainerName=trollflow2-fci
 Network=pytroll.network
 # Standard Volumes
@@ -17,7 +18,8 @@ Volume={{ install_dir }}/local/:/.local/:z
 Volume={{ extra_trollflow2_volume }}
 {% endif %}
 
-Environment=GDAL_NUM_THREADS=ALL_CPUS NUM_THREADS=ALL_CPUS
+Environment=GDAL_NUM_THREADS=ALL_CPUS
+Environment=NUM_THREADS=ALL_CPUS
 User=0
 DNSSearch={{ dns_domain }}
 

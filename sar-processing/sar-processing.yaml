@@ -67,7 +67,7 @@
     - name: copy the environment configuration
       copy:
         src: env-variables
-        dest: "{{ install_dir }}/config_fci_nc"
+        dest: "{{ install_dir }}/config_sar_grd"
       register: environment_config_results
 
     - name: Ensure output directory exists
@@ -82,24 +82,32 @@
         state: directory
         mode: "0755"
 
+    - name: Ensure Quadlet runtime directory exists
+      ansible.builtin.file:
+        path: "/run/user/{{ user_id_result.stdout }}"
+        state: directory
+        mode: "0755"
+
     - name: Create Quadlet network file
       ansible.builtin.copy:
         dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/pytroll.network"
         content: |
           [Network]
           NetworkName=pytroll_network
+          [Install]
+          WantedBy=default.target
       register: network_file
 
-    - name: Create Quadlet for Segment Gatherer
+    - name: Create Quadlet for Pytroll-watcher
       template:
-        src: segment_gatherer.container.j2
-        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/segment-gatherer-fci.container"
-      register: quad_segment
+        src: pytroll-watcher.container.j2
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/pytroll-watcher-sar.container"
+      register: quad_watcher
 
     - name: Create Quadlet for Trollflow2
       template:
         src: trollflow2.container.j2
-        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/trollflow2-fci.container"
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/trollflow2-sar.container"
       register: quad_trollflow
 
     - name: Ensure the latest image is present
@@ -107,8 +115,8 @@
         name: "{{ docker_repo }}{{ item }}"
         force: yes # This forces a pull even if the tag is already present
       loop:
-        - "segment-gatherer:main"
-        - "trollflow2:main-mamba"
+        - "pytroll-watcher:main"
+        - "trollflow2:main-uv-unstable"
       register: image_pull
 
     - name: Reload systemd to apply changes
@@ -117,7 +125,19 @@
         daemon_reload: yes
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
-      when: network_file.changed or quad_segment.changed or quad_trollflow.changed
+      when: network_file.changed or quad_watcher.changed or quad_trollflow.changed or image_pull.changed
+
+    - name: Restart services when image changed
+      ansible.builtin.systemd:
+        scope: user
+        name: "{{ item }}.service"
+        state: restarted
+      loop:
+        - pytroll-watcher-sar
+        - trollflow2-sar
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
+      when: image_pull.changed
 
     - name: Ensure services are enabled and running
       ansible.builtin.systemd:
@@ -126,7 +146,8 @@
         state: started
         enabled: yes
       loop:
-        - segment-gatherer-fci
-        - trollflow2-fci
+        - pytroll-network
+        - pytroll-watcher-sar
+        - trollflow2-sar
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"

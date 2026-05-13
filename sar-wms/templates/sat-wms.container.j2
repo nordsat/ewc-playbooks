@@ -1,0 +1,41 @@
+# vim: set filetype=systemd.jinja:
+[Unit]
+Description=sat-wms Service for SAR S-1
+After=network-online.target
+
+[Container]
+Image={{ docker_repo }}sat-wms:main
+Pull=missing
+ContainerName=sat-wms-sar
+Network=pytroll.network
+Volume={{ output_dir }}:/mnt/output/:z
+Secret=pgpassword,type=env,target=PGPASSWORD
+Environment=GDAL_NUM_THREADS=ALL_CPUS
+Environment=NUM_THREADS=ALL_CPUS
+Environment=UVICORN_HOST=0.0.0.0
+Environment=UVICORN_PORT=8997
+Environment=UVICORN_WORKERS=3
+Environment=SAT_WMS_FORCE_WEBP=True
+Environment=SAT_WMS_EMPTY_NO_CONTENT=True
+Environment=SAT_WMS_WMTS_MAX_ZOOM=15
+Environment=SAT_WMS_LAYER_NAME_PREFIX="Sentinel-1 SAR-C "
+Environment=SAT_WMS_TIMESTEP_MODE=stepped
+Environment=SAT_WMS_SNAPSHOT_STEP=12h
+Environment=SAT_WMS_SNAPSHOT_COUNT=4
+Environment=SAT_WMS_DATABASE_URL=postgresql://postgres@postgis-sar/postgres
+Environment=SAT_WMS_BASE_URL=https://wms-proxy-staging.int-nordmet-nordsat.s.ewcloud.host/sar
+Environment=SAT_WMS_WMS_TITLE="Nordsat SAR WMTS"
+Environment=SAT_WMS_SUPPORTED_CRS="EPSG:3575,EPSG:3857,EPSG:5041,EPSG:4326,EPSG:3301"
+Environment=SAT_WMS_PRODUCTS_TABLE_NAME=public.{{ pg_table_name }}
+# add a Volume line for the cache dir to preserve between container restarts
+Environment=SAT_WMS_TILE_CACHE_DIR=/tmp/sar_tile_cache
+Environment=SAT_WMS_TILE_CACHE_MAX_SIZE_MB=500
+User=0
+DNSSearch={{ dns_domain }}
+PublishPort=8997:8997
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

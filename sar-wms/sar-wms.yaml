@@ -1,0 +1,280 @@
+---
+- hosts: all
+  name: sar-wms
+
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Include vars
+      ansible.builtin.include_vars: vars.yaml
+
+    - name: Check if user lingering is enabled
+      ansible.builtin.stat:
+        path: "/var/lib/systemd/linger/{{ ansible_user_id }}"
+      register: user_lingering
+
+    - name: Warn if lingering is disabled
+      ansible.builtin.debug:
+        msg: "WARNING: Lingering is disabled. Services will not start at boot or persist after logout. Run 'sudo loginctl enable-linger {{ ansible_user_id }}' if possible."
+      when: not user_lingering.stat.exists
+
+    - name: bug fix for ubuntu 22 https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394
+      shell: curl -O http://archive.ubuntu.com/ubuntu/pool/universe/g/golang-github-containernetworking-plugins/containernetworking-plugins_1.1.1+ds1-3build1_amd64.deb
+      when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
+
+    - name: bug fix for ubuntu 22 https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394 part 2
+      shell: dpkg -i containernetworking-plugins_1.1.1+ds1-3build1_amd64.deb
+      when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
+
+    - name: Install the latest version of aardvark-dns
+      package:
+        name: aardvark-dns
+        state: latest
+      when: ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '24.04'
+
+    - name: Install the latest version of uidmap
+      package:
+        name: uidmap
+        state: latest
+      when: (ignore_packages is not defined or not (ignore_packages | bool)) and (ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '22.04')
+
+    - name: Install the latest version of slirp4netns
+      package:
+        name: slirp4netns
+        state: latest
+      when: (ignore_packages is not defined or not (ignore_packages | bool))
+
+    - name: Get UID of the become user
+      ansible.builtin.command: id -u
+      register: user_id_result
+      changed_when: false
+
+    - name: Create install directory
+      file:
+        path: "{{ install_dir }}"
+        state: directory
+        mode: "0777"
+
+    - name: Create pg-data directory
+      file:
+        path: "{{ install_dir }}/pg-data"
+        state: directory
+        #mode: '0777'
+
+    - name: install the init sql
+      template:
+        src: init.sql
+        dest: "{{ install_dir }}"
+      register: init_sql
+
+    - name: Update the trollflow2 configuration
+      git:
+        repo: https://github.com/nordsat/ewc-config.git
+        dest: "{{ install_dir }}/config"
+      register: git_config_results
+      failed_when:
+        - git_config_results.failed
+        - not 'Local modifications exist in repository' in git_config_results.msg
+
+    - name: Ensure Quadlet directory exists
+      ansible.builtin.file:
+        path: "/etc/containers/systemd/users/{{ user_id_result.stdout }}"
+        state: directory
+        mode: "0755"
+
+    - name: Ensure Quadlet runtime directory exists
+      ansible.builtin.file:
+        path: "/run/user/{{ user_id_result.stdout }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create Quadlet network file
+      ansible.builtin.copy:
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/pytroll.network"
+        content: |
+          [Network]
+          NetworkName=pytroll_network
+          [Install]
+          WantedBy=default.target
+      register: network_file
+
+    - name: Create Quadlet for postgis
+      template:
+        src: postgis.container.j2
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/postgis-sar.container"
+      register: quad_postgis
+
+    - name: Create Quadlet for db-push
+      template:
+        src: db-push.container.j2
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/db-push-sar.container"
+      register: quad_db_push
+
+    - name: install the db-push config file
+      template:
+        src: db-push.yaml
+        dest: "{{ install_dir }}"
+      register: dbpush_config
+
+    - name: Create Quadlet for sat-wms
+      template:
+        src: sat-wms.container.j2
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/sat-wms-sar.container"
+      register: quad_sat_wms
+
+    - name: Ensure the latest postgis image is present
+      containers.podman.podman_image:
+        name: docker.io/postgis/postgis:latest
+        force: yes # This forces a pull even if the tag is already present
+      register: image_pull_postgis
+
+    - name: Ensure the latest image is present
+      containers.podman.podman_image:
+        name: "{{ docker_repo }}{{ item }}"
+        force: yes # This forces a pull even if the tag is already present
+      loop:
+        - "db-push:main"
+        - "sat-wms:main"
+      register: image_pull
+
+    - name: Reload systemd to apply changes
+      systemd:
+        scope: user
+        daemon_reload: yes
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
+      when: network_file.changed or quad_postgis.changed or quad_db_push.changed or quad_sat_wms.changed
+
+    - name: Ensure services are enabled and running
+      ansible.builtin.systemd:
+        scope: user
+        name: "{{ item }}.service"
+        state: started
+        enabled: yes
+      loop:
+        - pytroll-network
+        - postgis-sar
+        - db-push-sar
+        - sat-wms-sar
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
+
+    # old stuff
+    # - name: Pull the postgis image
+    #   containers.podman.podman_image:
+    #     name: docker.io/postgis/postgis:latest
+    #   register: postgis_image
+    #
+    # - name: Should the container be restarted?
+    #   ansible.builtin.debug:
+    #     msg: "{{ (postgis_image.changed or init_sql.changed) | bool }}"
+    #
+    # - name: Restart postgis
+    #   containers.podman.podman_container:
+    #     name: postgis-viirs
+    #     image: docker.io/postgis/postgis:latest
+    #     state: started
+    #     force_restart: "{{ (postgis_image.changed or init_sql.changed) | bool }}"
+    #     mount:
+    #       - "type=bind,source={{ install_dir }}/pg-data/,target=/var/lib/postgresql/data"
+    #       - "type=bind,source={{ install_dir }}/init.sql,target=/docker-entrypoint-initdb.d/init.sql"
+    #     secrets:
+    #       - pgpassword,type=env,target=POSTGRES_PASSWORD
+    #     rm: true
+    #     network: pytroll_network
+    #     publish: 5432:5432
+    #   register: postgis_pod
+    #
+    # ## Install and run db-sync
+    #
+    # - name: Create mapfile directory
+    #   file:
+    #     path: "{{ map_dir }}"
+    #     state: directory
+    #     mode: "0755"
+    #
+    # - name: Touch mapfile
+    #   file:
+    #     path: "{{ map_dir }}/mapfile_layers.map"
+    #     state: touch
+    #     mode: u=rw,g=r,o=r
+    #
+    # - name: Update the trollflow2 configuration
+    #   git:
+    #     repo: https://github.com/nordsat/ewc-config.git
+    #     dest: "{{ install_dir }}/config"
+    #   register: git_config_results
+    #   failed_when:
+    #     - git_config_results.failed
+    #     - not 'Local modifications exist in repository' in git_config_results.msg
+    #
+    # - name: install the db-sync config file
+    #   template:
+    #     src: db-sync.yaml
+    #     dest: "{{ install_dir }}"
+    #   register: dbsync_config
+    #
+    # - name: Pull the db-sync image
+    #   containers.podman.podman_image:
+    #     name: docker.io/mraspaud/db-sync:main
+    #     force: true
+    #   register: dbsync_image
+    #
+    # - name: Should the container be restarted?
+    #   ansible.builtin.debug:
+    #     msg: "{{ (dbsync_image.changed or dbsync_config.changed or git_config_results.changed) | bool }}"
+    #
+    # - name: Restart db-sync
+    #   containers.podman.podman_container:
+    #     name: db-sync-viirs
+    #     image: docker.io/mraspaud/db-sync:main
+    #     state: started
+    #     force_restart: "{{ (dbsync_image.changed or dbsync_config.changed or git_config_results.changed) | bool }}"
+    #     mount:
+    #       - "type=bind,source={{ input_dir }},target=/mnt/output/"
+    #       - "type=bind,source={{ map_dir }},target=/usr/local/bin/db-sync/output/"
+    #       - "type=bind,source={{ install_dir }}/config/config_viirs_h5/trollflow2.yaml,target=/etc/trollflow2.yaml"
+    #       - "type=bind,source={{ install_dir }}/db-sync.yaml,target=/etc/db-sync.yaml"
+    #     secrets:
+    #       - pgpassword,type=env,target=POSTGRES_PASSWORD
+    #     # rm: true
+    #     network: pytroll_network
+    #   register: dbsync_pod
+    #
+    # ## Install and run mapserver
+    #
+    # - name: install the map base file
+    #   template:
+    #     src: mapserver-demo.map
+    #     dest: "{{ install_dir }}"
+    #   register: mapfile_template
+    #
+    # - name: Pull the mapserver image
+    #   containers.podman.podman_image:
+    #     name: docker.io/camptocamp/mapserver:latest
+    #   register: mapserver_image
+    #
+    # - name: Should the container be restarted?
+    #   ansible.builtin.debug:
+    #     msg: "{{ (mapserver_image.changed or mapfile_template.changed) | bool }}"
+    #
+    # - name: Restart mapserver
+    #   containers.podman.podman_container:
+    #     name: mapserver-viirs
+    #     image: docker.io/camptocamp/mapserver:latest
+    #     state: started
+    #     force_restart: "{{ (mapserver_image.changed or mapfile_template.changed) | bool }}"
+    #     mount:
+    #       - "type=bind,source={{ install_dir }}/mapserver-demo.map/,target=/etc/mapserver/mapserver.map"
+    #       - "type=bind,source={{ map_dir }}/mapfile_layers.map,target=/etc/mapserver/mapfile_pytroll_layers.map"
+    #       - "type=bind,source={{ input_dir }},target=/mnt/output"
+    #     secrets:
+    #       - pgpassword,type=env,target=POSTGRES_PASSWORD
+    #     env:
+    #       MS_MAPFILE: /etc/mapserver/mapserver.map
+    #
+    #     rm: true
+    #     publish: 8999:80
+    #     network: pytroll_network
+    #   register: mapserver_pod

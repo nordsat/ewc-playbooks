@@ -1,0 +1,5 @@
+install_dir: "{{ ansible_env.HOME }}/wms"
+output_dir: /eodata/sar_out/
+pg_table_name: products_sar
+docker_repo: docker.io/mraspaud/
+dns_domain: ""
