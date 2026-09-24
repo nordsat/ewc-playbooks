@@ -188,6 +188,20 @@
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
 
+    # Install the disk-cleaning script and schedule it via cron
+
+    - name: Install the SAR cleaning script
+      template:
+        src: "{{ playbook_dir }}/../common/templates/clean-output.sh.j2"
+        dest: "{{ install_dir }}/clean-sar.sh"
+        mode: "0755"
+
+    - name: Schedule SAR output cleaning
+      ansible.builtin.cron:
+        name: "Clean SAR output directory"
+        minute: "0,15,30,45"
+        job: "{{ install_dir }}/clean-sar.sh"
+
     # old stuff
     # - name: Pull the postgis image
     #   containers.podman.podman_image:

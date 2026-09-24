@@ -6,3 +6,6 @@ dns_domain: ""
 postgis_image: docker.io/postgis/postgis:latest
 db_push_image: "db-push:main"
 sat_wms_image: "sat-wms:main"
+# cleaning of the output directory
+clean_threshold_gb: 185
+postgis_container: postgis-sar
