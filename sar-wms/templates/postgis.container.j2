@@ -1,7 +1,7 @@
 # vim: set filetype=systemd.jinja:
 # This file is managed by ansible, do not edit it by hand.
 [Unit]
-Description=Postgis Service
+Description=Postgis Service for SAR
 After=network-online.target
 
 [Container]
@@ -12,7 +12,6 @@ Network=pytroll.network
 Volume={{ install_dir }}/pg-data/:/var/lib/postgresql/data:z
 Volume={{ install_dir }}/init.sql:/docker-entrypoint-initdb.d/init.sql:z
 Secret=pgpassword,type=env,target=POSTGRES_PASSWORD
-PublishPort=5432:5432
 
 User=0
 DNSSearch={{ dns_domain }}
@@ -22,8 +21,3 @@ Restart=always
 
 [Install]
 WantedBy=default.target
-
-
-      {#   rm: true #}
-      {#   publish: 5432:5432 #}
-      {# register: postgis_pod #}
