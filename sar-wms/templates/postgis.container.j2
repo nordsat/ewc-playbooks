@@ -1,10 +1,11 @@
 # vim: set filetype=systemd.jinja:
+# This file is managed by ansible, do not edit it by hand.
 [Unit]
 Description=Postgis Service
 After=network-online.target
 
 [Container]
-Image=docker.io/postgis/postgis:latest
+Image={{ postgis_image }}
 Pull=missing
 ContainerName=postgis-sar
 Network=pytroll.network

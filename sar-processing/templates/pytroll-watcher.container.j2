@@ -1,9 +1,10 @@
 # vim: set filetype=systemd.jinja:
+# This file is managed by ansible, do not edit it by hand.
 [Unit]
 Description=Pytroll Watcher Service for SAR S-1 data
 
 [Container]
-Image={{ docker_repo }}pytroll-watcher:main
+Image={{ docker_repo }}{{ watcher_image }}
 Pull=never
 ContainerName=pytroll-watcher-sar
 Network=pytroll.network

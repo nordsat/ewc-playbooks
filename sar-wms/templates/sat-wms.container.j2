@@ -1,10 +1,11 @@
 # vim: set filetype=systemd.jinja:
+# This file is managed by ansible, do not edit it by hand.
 [Unit]
 Description=sat-wms Service for SAR S-1
 After=network-online.target
 
 [Container]
-Image={{ docker_repo }}sat-wms:main
+Image={{ docker_repo }}{{ sat_wms_image }}
 Pull=missing
 ContainerName=sat-wms-sar
 Network=pytroll.network

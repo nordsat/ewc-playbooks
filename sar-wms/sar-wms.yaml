@@ -6,18 +6,26 @@
     - vars.yaml
 
   tasks:
-    - name: Include vars
-      ansible.builtin.include_vars: vars.yaml
-
     - name: Check if user lingering is enabled
       ansible.builtin.stat:
         path: "/var/lib/systemd/linger/{{ ansible_user_id }}"
       register: user_lingering
 
-    - name: Warn if lingering is disabled
-      ansible.builtin.debug:
-        msg: "WARNING: Lingering is disabled. Services will not start at boot or persist after logout. Run 'sudo loginctl enable-linger {{ ansible_user_id }}' if possible."
-      when: not user_lingering.stat.exists
+    - name: Enable lingering for service user
+      become: true
+      ansible.builtin.command:
+        cmd: "loginctl enable-linger {{ ansible_user_id }}"
+      changed_when: false
+
+    - name: Install the latest version of podman
+      package:
+        name: podman
+        state: latest
+      become: true
+      when: (ignore_packages is not defined or not (ignore_packages | bool))
+
+    - name: show podman version
+      shell: podman --version
 
     - name: bug fix for ubuntu 22 https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394
       shell: curl -O http://archive.ubuntu.com/ubuntu/pool/universe/g/golang-github-containernetworking-plugins/containernetworking-plugins_1.1.1+ds1-3build1_amd64.deb
@@ -31,18 +39,21 @@
       package:
         name: aardvark-dns
         state: latest
+      become: true
       when: ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '24.04'
 
     - name: Install the latest version of uidmap
       package:
         name: uidmap
         state: latest
+      become: true
       when: (ignore_packages is not defined or not (ignore_packages | bool)) and (ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '22.04')
 
     - name: Install the latest version of slirp4netns
       package:
         name: slirp4netns
         state: latest
+      become: true
       when: (ignore_packages is not defined or not (ignore_packages | bool))
 
     - name: Get UID of the become user
@@ -82,12 +93,7 @@
         path: "/etc/containers/systemd/users/{{ user_id_result.stdout }}"
         state: directory
         mode: "0755"
-
-    - name: Ensure Quadlet runtime directory exists
-      ansible.builtin.file:
-        path: "/run/user/{{ user_id_result.stdout }}"
-        state: directory
-        mode: "0755"
+      become: true
 
     - name: Create Quadlet network file
       ansible.builtin.copy:
@@ -98,18 +104,21 @@
           [Install]
           WantedBy=default.target
       register: network_file
+      become: true
 
     - name: Create Quadlet for postgis
       template:
         src: postgis.container.j2
         dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/postgis-sar.container"
       register: quad_postgis
+      become: true
 
     - name: Create Quadlet for db-push
       template:
         src: db-push.container.j2
         dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/db-push-sar.container"
       register: quad_db_push
+      become: true
 
     - name: install the db-push config file
       template:
@@ -122,10 +131,11 @@
         src: sat-wms.container.j2
         dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/sat-wms-sar.container"
       register: quad_sat_wms
+      become: true
 
     - name: Ensure the latest postgis image is present
       containers.podman.podman_image:
-        name: docker.io/postgis/postgis:latest
+        name: "{{ postgis_image }}"
         force: yes # This forces a pull even if the tag is already present
       register: image_pull_postgis
 
@@ -134,8 +144,8 @@
         name: "{{ docker_repo }}{{ item }}"
         force: yes # This forces a pull even if the tag is already present
       loop:
-        - "db-push:main"
-        - "sat-wms:main"
+        - "{{ db_push_image }}"
+        - "{{ sat_wms_image }}"
       register: image_pull
 
     - name: Reload systemd to apply changes
@@ -145,6 +155,24 @@
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
       when: network_file.changed or quad_postgis.changed or quad_db_push.changed or quad_sat_wms.changed
+
+    - name: Restart the services whose image, unit or configuration changed
+      ansible.builtin.systemd:
+        scope: user
+        name: "{{ item.name }}.service"
+        state: restarted
+      loop:
+        - name: postgis-sar
+          restart: "{{ quad_postgis.changed or image_pull_postgis.changed or init_sql.changed }}"
+        - name: db-push-sar
+          restart: "{{ quad_db_push.changed or dbpush_config.changed or git_config_results.changed or (image_pull.results | selectattr('item', 'equalto', db_push_image) | selectattr('changed') | list | length > 0) }}"
+        - name: sat-wms-sar
+          restart: "{{ quad_sat_wms.changed or (image_pull.results | selectattr('item', 'equalto', sat_wms_image) | selectattr('changed') | list | length > 0) }}"
+      loop_control:
+        label: "{{ item.name }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
+      when: item.restart | bool
 
     - name: Ensure services are enabled and running
       ansible.builtin.systemd:

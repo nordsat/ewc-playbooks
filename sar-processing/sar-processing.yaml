@@ -10,15 +10,17 @@
         path: "/var/lib/systemd/linger/{{ ansible_user_id }}"
       register: user_lingering
 
-    - name: Warn if lingering is disabled
-      ansible.builtin.debug:
-        msg: "WARNING: Lingering is disabled. Services will not start at boot or persist after logout. Run 'sudo loginctl enable-linger {{ ansible_user_id }}' if possible."
-      when: not user_lingering.stat.exists
+    - name: Enable lingering for service user
+      become: true
+      ansible.builtin.command:
+        cmd: "loginctl enable-linger {{ ansible_user_id }}"
+      changed_when: false
 
     - name: Install the latest version of podman
       package:
         name: podman
         state: latest
+      become: true
       when: (ignore_packages is not defined or not (ignore_packages | bool))
 
     - name: show podman version
@@ -36,18 +38,21 @@
       package:
         name: aardvark-dns
         state: latest
+      become: true
       when: ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '24.04'
 
     - name: Install the latest version of uidmap
       package:
         name: uidmap
         state: latest
+      become: true
       when: (ignore_packages is not defined or not (ignore_packages | bool)) and (ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '22.04')
 
     - name: Install the latest version of slirp4netns
       package:
         name: slirp4netns
         state: latest
+      become: true
       when: (ignore_packages is not defined or not (ignore_packages | bool))
 
     - name: Get UID of the become user
@@ -81,12 +86,14 @@
         path: "/etc/containers/systemd/users/{{ user_id_result.stdout }}"
         state: directory
         mode: "0755"
+      become: true
 
-    - name: Ensure Quadlet runtime directory exists
-      ansible.builtin.file:
-        path: "/run/user/{{ user_id_result.stdout }}"
-        state: directory
-        mode: "0755"
+    # - name: Ensure Quadlet runtime directory exists
+    #   ansible.builtin.file:
+    #     path: "/run/user/{{ user_id_result.stdout }}"
+    #     state: directory
+    #     mode: "0755"
+    #   become: true
 
     - name: Create Quadlet network file
       ansible.builtin.copy:
@@ -97,26 +104,29 @@
           [Install]
           WantedBy=default.target
       register: network_file
+      become: true
 
     - name: Create Quadlet for Pytroll-watcher
       template:
         src: pytroll-watcher.container.j2
         dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/pytroll-watcher-sar.container"
       register: quad_watcher
+      become: true
 
     - name: Create Quadlet for Trollflow2
       template:
         src: trollflow2.container.j2
         dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/trollflow2-sar.container"
       register: quad_trollflow
+      become: true
 
     - name: Ensure the latest image is present
       containers.podman.podman_image:
         name: "{{ docker_repo }}{{ item }}"
         force: yes # This forces a pull even if the tag is already present
       loop:
-        - "pytroll-watcher:main"
-        - "trollflow2:main-uv-unstable"
+        - "{{ watcher_image }}"
+        - "{{ trollflow2_image }}"
       register: image_pull
 
     - name: Reload systemd to apply changes
@@ -127,17 +137,27 @@
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
       when: network_file.changed or quad_watcher.changed or quad_trollflow.changed or image_pull.changed
 
-    - name: Restart services when image changed
+    - name: Restart the services whose image, unit or configuration changed
       ansible.builtin.systemd:
         scope: user
-        name: "{{ item }}.service"
+        name: "{{ item.name }}.service"
         state: restarted
       loop:
-        - pytroll-watcher-sar
-        - trollflow2-sar
+        - name: pytroll-watcher-sar
+          image: "{{ watcher_image }}"
+          unit_changed: "{{ quad_watcher.changed }}"
+        - name: trollflow2-sar
+          image: "{{ trollflow2_image }}"
+          unit_changed: "{{ quad_trollflow.changed }}"
+      loop_control:
+        label: "{{ item.name }}"
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
-      when: image_pull.changed
+      when: >-
+        item.unit_changed | bool
+        or git_config_results.changed
+        or environment_config_results.changed
+        or (image_pull.results | selectattr('item', 'equalto', item.image) | selectattr('changed') | list | length > 0)
 
     - name: Ensure services are enabled and running
       ansible.builtin.systemd:
