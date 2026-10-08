@@ -1,0 +1,2 @@
+export MESSAGE_SOURCE=tcp://pytroll-watcher-sar:10001
+export SATPY_CONFIG_PATH=/config/satpy

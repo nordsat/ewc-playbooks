@@ -10,7 +10,7 @@ patterns:
 timeliness: 120
 time_name: start_time
 
-check_existing_files_after_start: true
+check_existing_files_after_start: false # fails with remote files
 
 posttroll:
   topics:
@@ -18,6 +18,6 @@ posttroll:
   publish_topic:
     /dataset/viirs_h5
   addresses:
-    - tcp://trollstalker-viirs:10000
+    - {{ message_source }}
   nameservers: false
   publish_port: 10001

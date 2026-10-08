@@ -1,3 +1,9 @@
 install_dir: "{{ ansible_env.HOME }}/viirs-processing"
-input_dir: /eodata/viirs/
 output_dir: /eodata/viirs_out/
+config_repo: https://github.com/nordsat/ewc-config.git
+docker_repo: docker.io/mraspaud/
+dns_domain: ""
+segment_gatherer_image: "segment-gatherer:main"
+trollflow2_image: "trollflow2:main"
+# The pytroll-watcher-viirs on the EUMETCast host, see eumetcast/viirs-watcher.yaml
+message_source: tcp://10.0.0.125:9296

@@ -21,6 +21,7 @@ MAP
       "wms_include_items" "all"
       "wms_feature_info_mime_type" "text/html"
       "wms_allow_getmap_without_styles" "true"
+      "wms_http_max_age" "86400"
     END
   END # Web
 

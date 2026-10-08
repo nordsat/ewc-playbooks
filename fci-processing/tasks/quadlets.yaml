@@ -1,0 +1,55 @@
+---
+# Create, pull and start every quadlet listed in the `quadlets` variable.
+
+- name: Select the quadlets to deploy
+  ansible.builtin.set_fact:
+    active_quadlets: "{{ active_quadlets | default([]) + [item] }}"
+  loop: "{{ quadlets }}"
+  when: item.enabled | default(true) | bool
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Create the quadlet files
+  become: true
+  template:
+    src: container.j2
+    dest: "{{ quadlet_dir }}/{{ item.name }}.container"
+  loop: "{{ active_quadlets | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: quadlet_files
+
+- name: Ensure the latest images are present
+  containers.podman.podman_image:
+    name: "{{ docker_repo }}{{ item }}"
+    force: yes # This forces a pull even if the tag is already present
+  loop: "{{ active_quadlets | default([]) | map(attribute='image') | unique | list }}"
+  register: image_pull
+  tags:
+    - runtime
+
+- name: Reload systemd to apply changes
+  systemd:
+    scope: user
+    daemon_reload: yes
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
+  # Always reload: the quadlet files may be unchanged since a run that failed
+  # before reloading, and then their services would never be generated.
+  changed_when: false
+  tags:
+    - runtime
+
+- name: Ensure services are enabled and running
+  ansible.builtin.systemd:
+    scope: user
+    name: "{{ item.name }}.service"
+    state: started
+    enabled: yes
+  loop: "{{ active_quadlets | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
+  tags:
+    - runtime

@@ -1,0 +1,15 @@
+---
+- name: Setup the Pytroll watcher for VIIRS data
+  hosts: all
+  vars_files:
+    - vars.yaml
+  vars:
+    watcher:
+      name: viirs
+      description: VIIRS
+      config_dir: config_viirs_watcher
+      port: 9296 # must match publisher_config.port in config_viirs_watcher/watcher_config.yaml
+
+  tasks:
+    - name: Install the VIIRS watcher
+      ansible.builtin.include_tasks: watcher-tasks.yaml

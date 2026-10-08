@@ -1,5 +1,5 @@
 ---
-- name: Setup Rootless Pytroll Stack for VIIRS
+- name: Setup Rootless Pytroll Stack
   hosts: all
   vars_files:
     - vars.yaml
@@ -33,13 +33,6 @@
     - name: bug fix for ubuntu 22 https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394 part 2
       shell: dpkg -i containernetworking-plugins_1.1.1+ds1-3build1_amd64.deb
       when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
-
-    - name: Install the latest version of cron
-      package:
-        name: cron
-        state: latest
-      become: true
-      when: (ignore_packages is not defined or not (ignore_packages | bool))
 
     - name: Install the latest version of aardvark-dns
       package:
@@ -76,40 +69,17 @@
         - git_config_results.failed
         - not 'Local modifications exist in repository' in git_config_results.msg
 
-    - name: Create local pyspectral directory
-      file:
-        path: "{{ install_dir }}/local/"
-        state: directory
-        mode: "0777"
-
-    - name: install the segment-gatherer configuration
-      template:
-        src: segment_gatherer.yaml.j2
-        dest: "{{ install_dir }}/config_viirs_h5/segment_gatherer.yaml"
-      register: segment_gatherer_config_results
-
     - name: copy the environment configuration
       copy:
         src: env-variables
-        dest: "{{ install_dir }}/config_viirs_h5"
+        dest: "{{ install_dir }}/config_sar_grd"
       register: environment_config_results
 
     - name: Ensure output directory exists
       ansible.builtin.file:
         path: "{{ output_dir }}"
         state: directory
-        mode: "0777"
-      become: true
-
-    # The input files now stay on the EUMETCast host, and the output directory is
-    # cleaned by clean-viirs.sh from viirs-wms, which also removes the database rows
-    - name: Remove the old cleaning of input and output directories
-      ansible.builtin.cron:
-        name: "{{ item }}"
-        state: absent
-      loop:
-        - "Clean up input data directory"
-        - "Clean up output data directory"
+        mode: "0755"
 
     - name: Ensure Quadlet directory exists
       ansible.builtin.file:
@@ -117,6 +87,13 @@
         state: directory
         mode: "0755"
       become: true
+
+    # - name: Ensure Quadlet runtime directory exists
+    #   ansible.builtin.file:
+    #     path: "/run/user/{{ user_id_result.stdout }}"
+    #     state: directory
+    #     mode: "0755"
+    #   become: true
 
     - name: Create Quadlet network file
       ansible.builtin.copy:
@@ -129,25 +106,17 @@
       register: network_file
       become: true
 
-    # Replaced by the pytroll-watcher-viirs on the EUMETCast host
-    - name: Remove the Trollstalker Quadlet
-      ansible.builtin.file:
-        path: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/trollstalker-viirs.container"
-        state: absent
-      register: quad_trollstalker
-      become: true
-
-    - name: Create Quadlet for Segment-gatherer
+    - name: Create Quadlet for Pytroll-watcher
       template:
-        src: segment-gatherer.container.j2
-        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/segment-gatherer-viirs.container"
-      register: quad_segment_gatherer
+        src: pytroll-watcher.container.j2
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/pytroll-watcher-sar.container"
+      register: quad_watcher
       become: true
 
     - name: Create Quadlet for Trollflow2
       template:
         src: trollflow2.container.j2
-        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/trollflow2-viirs.container"
+        dest: "/etc/containers/systemd/users/{{ user_id_result.stdout }}/trollflow2-sar.container"
       register: quad_trollflow
       become: true
 
@@ -156,7 +125,7 @@
         name: "{{ docker_repo }}{{ item }}"
         force: yes # This forces a pull even if the tag is already present
       loop:
-        - "{{ segment_gatherer_image }}"
+        - "{{ watcher_image }}"
         - "{{ trollflow2_image }}"
       register: image_pull
 
@@ -166,7 +135,7 @@
         daemon_reload: yes
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
-      when: network_file.changed or quad_trollstalker.changed or quad_segment_gatherer.changed or quad_trollflow.changed
+      when: network_file.changed or quad_watcher.changed or quad_trollflow.changed or image_pull.changed
 
     - name: Restart the services whose image, unit or configuration changed
       ansible.builtin.systemd:
@@ -174,18 +143,20 @@
         name: "{{ item.name }}.service"
         state: restarted
       loop:
-        - name: segment-gatherer-viirs
-          image: "{{ segment_gatherer_image }}"
-          changed: "{{ quad_segment_gatherer.changed or segment_gatherer_config_results.changed }}"
-        - name: trollflow2-viirs
+        - name: pytroll-watcher-sar
+          image: "{{ watcher_image }}"
+          unit_changed: "{{ quad_watcher.changed }}"
+        - name: trollflow2-sar
           image: "{{ trollflow2_image }}"
-          changed: "{{ quad_trollflow.changed or git_config_results.changed or environment_config_results.changed }}"
+          unit_changed: "{{ quad_trollflow.changed }}"
       loop_control:
         label: "{{ item.name }}"
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"
       when: >-
-        item.changed | bool
+        item.unit_changed | bool
+        or git_config_results.changed
+        or environment_config_results.changed
         or (image_pull.results | selectattr('item', 'equalto', item.image) | selectattr('changed') | list | length > 0)
 
     - name: Ensure services are enabled and running
@@ -196,7 +167,7 @@
         enabled: yes
       loop:
         - pytroll-network
-        - segment-gatherer-viirs
-        - trollflow2-viirs
+        - pytroll-watcher-sar
+        - trollflow2-sar
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_id_result.stdout }}"

@@ -1,11 +1,11 @@
-install_dir: "{{ ansible_env.HOME }}/viirs-wms"
-output_dir: /eodata/viirs_out/
-pg_table_name: products_viirs
+install_dir: "{{ ansible_env.HOME }}/sar-wms"
+output_dir: /eodata/sar_out/
+pg_table_name: products_sar
 docker_repo: docker.io/mraspaud/
 dns_domain: ""
 postgis_image: docker.io/postgis/postgis:17-3.5
 db_push_image: "db-push:main"
 sat_wms_image: "sat-wms:main"
 # cleaning of the output directory
-clean_threshold_gb: 70
-postgis_container: postgis-viirs
+clean_threshold_gb: 185
+postgis_container: postgis-sar

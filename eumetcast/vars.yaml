@@ -1,0 +1,9 @@
+install_dir: "{{ ansible_env.HOME }}/fci-watching"
+config_repo: https://github.com/nordsat/ewc-config.git
+docker_repo: docker.io/mraspaud/
+dns_domain: ""
+watcher_image: "pytroll-watcher:main"
+# trollflow2_image: "trollflow2:main-uv-unstable"
+# Home of the Tellicast user, which receives in data/eumetcast/ relative to it.
+# /eumetcast is linked there. Set to "" when /eumetcast already holds the data.
+tellicast_home: /home/eumetuser

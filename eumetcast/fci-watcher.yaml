@@ -1,0 +1,15 @@
+---
+- name: Setup the Pytroll watcher for FCI data
+  hosts: all
+  vars_files:
+    - vars.yaml
+  vars:
+    watcher:
+      name: fci
+      description: FCI
+      config_dir: config_fci_watcher
+      port: 9295 # must match publisher_config.port in config_fci_watcher/watcher_config.yaml
+
+  tasks:
+    - name: Install the FCI watcher
+      ansible.builtin.include_tasks: watcher-tasks.yaml

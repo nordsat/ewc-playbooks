@@ -1,0 +1,23 @@
+# vim: set filetype=systemd.jinja:
+# This file is managed by ansible, do not edit it by hand.
+[Unit]
+Description=Postgis Service for SAR
+After=network-online.target
+
+[Container]
+Image={{ postgis_image }}
+Pull=missing
+ContainerName=postgis-sar
+Network=pytroll.network
+Volume={{ install_dir }}/pg-data/:/var/lib/postgresql/data:z
+Volume={{ install_dir }}/init.sql:/docker-entrypoint-initdb.d/init.sql:z
+Secret=pgpassword,type=env,target=POSTGRES_PASSWORD
+
+User=0
+DNSSearch={{ dns_domain }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

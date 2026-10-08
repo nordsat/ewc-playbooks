@@ -1,0 +1,84 @@
+---
+# Configuration shared by every stack: the config repo checkout, the data
+# directories, and the podman network.
+
+- name: Update the trollflow2 configuration
+  git:
+    repo: "{{ config_repo }}"
+    dest: "{{ install_dir }}"
+  register: git_config_results
+  failed_when:
+    - git_config_results.failed
+    - not 'Local modifications exist in repository' in git_config_results.msg
+
+- name: copy the environment configuration
+  copy:
+    src: env-variables
+    dest: "{{ install_dir }}/config_fci_nc"
+  register: environment_config_results
+
+# The segment gatherer configuration is not shipped by the config repo, it is
+# generated here from message_source / with_hrfi.
+- name: Create the segment gatherer configuration
+  template:
+    src: segment_gatherer.yaml.j2
+    dest: "{{ install_dir }}/config_fci_nc/segment_gatherer.yaml"
+  when: manage_segment_gatherer_config | default(false) | bool
+
+# The dispatcher configuration template lives in the config repo, so it has to
+# be fetched from the target before it can be rendered.
+- name: Configure the dispatcher
+  when: enable_dispatch | default(false) | bool
+  block:
+    - name: Fetch the dispatcher config template
+      fetch:
+        flat: true
+        src: "{{ install_dir }}/config_fci_nc/dispatcher_config.yaml.j2"
+        dest: "/tmp/dispatcher_config.yaml.j2.{{ inventory_hostname }}"
+
+    - name: Create dispatcher configuration
+      template:
+        src: "/tmp/dispatcher_config.yaml.j2.{{ inventory_hostname }}"
+        dest: "{{ install_dir }}/config_fci_nc/dispatcher_config.yaml"
+
+# The input files are written by another process, so the directory is open to all.
+- name: Ensure input directory exists
+  ansible.builtin.file:
+    path: "{{ input_dir }}"
+    state: directory
+    mode: "0777"
+
+- name: Set up cleaning of the input directory
+  ansible.builtin.cron:
+    name: "Clean up input data directory"
+    minute: "*/10"
+    job: "cd {{ input_dir }}; find . -type f -mmin +120 -delete"
+  when: not (ignore_cleaning | default(false) | bool)
+
+- name: Ensure output directory exists
+  ansible.builtin.file:
+    path: "{{ output_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Ensure the local directory exists
+  ansible.builtin.file:
+    path: "{{ install_dir }}/local/share/"
+    state: directory
+    mode: "0777"
+
+- name: Ensure Quadlet directory exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ quadlet_dir }}"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user_id }}"
+
+- name: Create Quadlet network file
+  ansible.builtin.copy:
+    dest: "{{ quadlet_dir }}/pytroll.network"
+    content: |
+      [Network]
+      NetworkName=pytroll_network
+  register: network_file

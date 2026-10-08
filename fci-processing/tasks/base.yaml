@@ -1,0 +1,51 @@
+---
+# Host prerequisites for running rootless podman quadlets.
+
+- name: Check if user lingering is enabled
+  ansible.builtin.stat:
+    path: "/var/lib/systemd/linger/{{ ansible_user_id }}"
+  register: user_lingering
+
+# Without lingering, the user services stop when the last session ends and do
+# not start at boot.
+- name: Enable lingering for the service user
+  become: true
+  ansible.builtin.command:
+    cmd: "loginctl enable-linger {{ ansible_user_id }}"
+  when: not user_lingering.stat.exists
+
+- name: Install the latest version of podman
+  become: true
+  package:
+    name: podman
+    state: latest
+  when: (ignore_packages is not defined or not (ignore_packages | bool))
+
+- name: show podman version
+  shell: podman --version
+
+- name: Install the latest version of aardvark-dns
+  become: true
+  package:
+    name: aardvark-dns
+    state: latest
+  when: ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '24.04'
+
+- name: Install the latest version of uidmap
+  become: true
+  package:
+    name: uidmap
+    state: latest
+  when: (ignore_packages is not defined or not (ignore_packages | bool)) and (ansible_distribution == 'Ubuntu' and ansible_distribution_version >= '22.04')
+
+- name: Install the latest version of slirp4netns
+  become: true
+  package:
+    name: slirp4netns
+    state: latest
+  when: (ignore_packages is not defined or not (ignore_packages | bool))
+
+- name: Get UID of the become user
+  ansible.builtin.command: id -u
+  register: user_id_result
+  changed_when: false

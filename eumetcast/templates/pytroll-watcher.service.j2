@@ -1,0 +1,26 @@
+# vim: set filetype=systemd.jinja:
+# This file is managed by ansible, do not edit it by hand.
+#
+# A plain systemd user unit instead of a quadlet: the EUMETCast host runs Ubuntu
+# 22.04, whose podman (3.4) predates quadlets (4.4).
+[Unit]
+Description=Pytroll Watcher Service for {{ watcher.description }} data
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/podman rm --force --ignore pytroll-watcher-{{ watcher.name }}
+ExecStart=/usr/bin/podman run --rm --name pytroll-watcher-{{ watcher.name }} \
+    --userns=keep-id \
+    --publish {{ watcher.port }}:{{ watcher.port }} \
+    --volume {{ install_dir }}/{{ watcher.config_dir }}/:/config/:z \
+    --volume /eumetcast/:/eumetcast/:z \
+{% if dns_domain %}
+    --dns-search {{ dns_domain }} \
+{% endif %}
+    {{ docker_repo }}{{ watcher_image }}
+ExecStop=/usr/bin/podman stop --time 10 pytroll-watcher-{{ watcher.name }}
+
+[Install]
+WantedBy=default.target

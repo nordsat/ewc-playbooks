@@ -1,0 +1,30 @@
+# vim: set filetype=systemd.jinja:
+# This file is managed by ansible, do not edit it by hand.
+[Unit]
+Description={{ item.description }}
+After=network-online.target
+
+[Container]
+Image={{ docker_repo }}{{ item.image }}
+Pull=never
+ContainerName={{ item.name }}
+Network=pytroll.network
+{% for volume in item.volumes + (item.extra_volumes | default([])) %}
+Volume={{ volume }}
+{% endfor %}
+{% for key, value in (item.environment | default({})) | dictsort %}
+Environment={{ key }}={{ value }}
+{% endfor %}
+{% if item.user is defined %}
+User={{ item.user }}
+{% endif %}
+{% if item.userns is defined %}
+UserNS={{ item.userns }}
+{% endif %}
+DNSSearch={{ dns_domain }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

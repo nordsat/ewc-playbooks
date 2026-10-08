@@ -1,0 +1,94 @@
+#!/bin/bash
+# This file is managed by ansible, do not edit it by hand.
+#
+# Deletes the oldest products (by filename, which starts with the data time) until
+# the output directory is under the threshold, and removes their database rows.
+
+# --- Configuration ---
+TARGET_DIR="{{ output_dir | regex_replace('/$', '') }}"
+# Where the output directory is mounted in db-push, ie the paths stored in the database
+DB_DIR="{{ db_output_dir | default('/mnt/output') | regex_replace('/$', '') }}"
+THRESHOLD_GB={{ clean_threshold_gb }}
+THRESHOLD_BYTES=$((THRESHOLD_GB * 1024 * 1024 * 1024))
+
+DB_NAME="postgres"
+DB_USER="postgres"
+TABLE_NAME="{{ pg_table_name }}"
+COLUMN_NAME="filename"
+POSTGIS_CONTAINER="{{ postgis_container }}"
+
+# --- Dry-Run Setup ---
+DRY_RUN=0
+if [[ "$1" == "--dry-run" || "$1" == "-n" ]]; then
+    DRY_RUN=1
+    echo "[DRY RUN MODE ENABLED] No data will be harmed."
+fi
+
+# Temporary files for batching
+FILE_LIST=$(mktemp)
+SQL_SCRIPT=$(mktemp)
+
+# Ensure temp files are cleaned up even if the script crashes
+trap "rm -f '$FILE_LIST' '$SQL_SCRIPT'" EXIT
+
+CURRENT_SIZE=$(du -sb "$TARGET_DIR" | cut -f1)
+
+if [ "$CURRENT_SIZE" -gt "$THRESHOLD_BYTES" ]; then
+    EXCESS=$((CURRENT_SIZE - THRESHOLD_BYTES))
+    echo "Directory excess is $((EXCESS / 1024 / 1024)) MB. Calculating targets..."
+
+    # Start the SQL transaction
+    echo "BEGIN;" > "$SQL_SCRIPT"
+
+    # Iterate and build the hit lists
+    # Tab separated so that paths with spaces survive
+    find "$TARGET_DIR" -type f -printf "%f\t%s\t%p\n" | sort | while IFS=$'\t' read -r filename size path; do
+        if [ "$EXCESS" -gt 0 ]; then
+            # Add to disk deletion list
+            echo "$path" >> "$FILE_LIST"
+
+            # Add to SQL batch file (escaping single quotes in paths just in case)
+            DB_PATH="$DB_DIR/${path#"$TARGET_DIR"/}"
+            SAFE_PATH=$(echo "$DB_PATH" | sed "s/'/''/g")
+            echo "DELETE FROM $TABLE_NAME WHERE $COLUMN_NAME = '$SAFE_PATH';" >> "$SQL_SCRIPT"
+
+            EXCESS=$((EXCESS - size))
+        else
+            break
+        fi
+    done
+    echo "COMMIT;" >> "$SQL_SCRIPT"
+
+    # Check if we actually found files to delete
+    if [ -s "$FILE_LIST" ]; then
+        FILE_COUNT=$(wc -l < "$FILE_LIST")
+
+        if [ "$DRY_RUN" -eq 1 ]; then
+            echo -e "\n=== DRY RUN: Disk ==="
+            echo "Would delete $FILE_COUNT files from disk. First 5:"
+            head -n 5 "$FILE_LIST"
+            [ "$FILE_COUNT" -gt 5 ] && echo "... and $((FILE_COUNT - 5)) more."
+
+            echo -e "\n=== DRY RUN: Database ==="
+            echo "Would execute a single transaction with $FILE_COUNT deletions. First 5:"
+            # Print BEGIN and first 5 deletes
+            head -n 6 "$SQL_SCRIPT" | grep -v "^COMMIT;$"
+            [ "$FILE_COUNT" -gt 5 ] && echo "... and $((FILE_COUNT - 5)) more statements."
+            echo "COMMIT;"
+        else
+            echo "Executing database cleanup..."
+            # -q suppresses the output of every single DELETE statement
+            cat "$SQL_SCRIPT" | podman exec -i "$POSTGIS_CONTAINER" psql -d "$DB_NAME" -U "$DB_USER" -q
+
+            echo "Deleting $FILE_COUNT files from disk..."
+            # Convert newlines to null bytes to handle filenames with spaces safely
+            cat "$FILE_LIST" | tr '\n' '\0' | xargs -0 rm -f
+
+            echo "Cleanup complete."
+        fi
+    else
+        echo "No files identified for deletion. Check your paths."
+    fi
+else
+     echo "Directory size is under budget ($((CURRENT_SIZE / 1024 / 1024 / 1024))GB). Doing absolutely nothing."
+fi
