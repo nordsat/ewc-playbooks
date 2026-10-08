@@ -39,3 +39,6 @@ trollflow2_volumes:
 trollflow2_environment:
   GDAL_NUM_THREADS: ALL_CPUS
   NUM_THREADS: ALL_CPUS
+
+extra_trollflow2_volumes:
+  - "{{ ansible_user_dir }}/.ssh/:/root/.ssh:ro,Z"

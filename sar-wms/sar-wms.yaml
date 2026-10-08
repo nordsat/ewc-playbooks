@@ -35,6 +35,12 @@
       shell: dpkg -i containernetworking-plugins_1.1.1+ds1-3build1_amd64.deb
       when: ansible_distribution == 'Ubuntu' and ansible_distribution_version == '22.04'
 
+    - name: Install the latest version of cron
+      package:
+        name: cron
+        state: latest
+      become: true
+
     - name: Install the latest version of aardvark-dns
       package:
         name: aardvark-dns

@@ -1,10 +1,11 @@
 # vim: set filetype=systemd.jinja:
+# This file is managed by ansible, do not edit it by hand.
 [Unit]
 Description=sat-wms Service for VIIRS
 After=network-online.target
 
 [Container]
-Image={{ docker_repo }}sat-wms:main
+Image={{ docker_repo }}{{ sat_wms_image }}
 Pull=missing
 ContainerName=sat-wms-viirs
 Network=pytroll.network
@@ -14,7 +15,7 @@ Environment=GDAL_CACHEMAX=512
 Environment=GDAL_NUM_THREADS=ALL_CPUS
 Environment=NUM_THREADS=ALL_CPUS
 Environment=UVICORN_HOST=0.0.0.0
-Environment=UVICORN_PORT=8998
+Environment=UVICORN_PORT=8080
 Environment=UVICORN_WORKERS=4
 Environment=SAT_WMS_FORCE_WEBP=True
 Environment=SAT_WMS_EMPTY_NO_CONTENT=True
@@ -26,7 +27,7 @@ Environment=SAT_WMS_LAYER_NAME_PREFIX="VIIRS "
 Environment=SAT_WMS_PRODUCTS_TABLE_NAME=public.{{ pg_table_name }}
 User=0
 DNSSearch={{ dns_domain }}
-PublishPort=8998:8998
+PublishPort=8080:8080
 
 [Service]
 Restart=always

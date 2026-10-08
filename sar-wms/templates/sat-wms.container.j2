@@ -14,7 +14,7 @@ Secret=pgpassword,type=env,target=PGPASSWORD
 Environment=GDAL_NUM_THREADS=ALL_CPUS
 Environment=NUM_THREADS=ALL_CPUS
 Environment=UVICORN_HOST=0.0.0.0
-Environment=UVICORN_PORT=8997
+Environment=UVICORN_PORT=8080
 Environment=UVICORN_WORKERS=3
 Environment=SAT_WMS_FORCE_WEBP=True
 Environment=SAT_WMS_EMPTY_NO_CONTENT=True
@@ -33,7 +33,7 @@ Environment=SAT_WMS_TILE_CACHE_DIR=/tmp/sar_tile_cache
 Environment=SAT_WMS_TILE_CACHE_MAX_SIZE_MB=500
 User=0
 DNSSearch={{ dns_domain }}
-PublishPort=8997:8997
+PublishPort=8080:8080
 
 [Service]
 Restart=always

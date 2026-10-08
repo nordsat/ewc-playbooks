@@ -1,0 +1,18 @@
+# vim: set filetype=systemd.jinja:
+# This file is managed by ansible, do not edit it by hand.
+[Unit]
+Description=Segment Gatherer Service for VIIRS
+
+[Container]
+Image={{ docker_repo }}{{ segment_gatherer_image }}
+Pull=never
+ContainerName=segment-gatherer-viirs
+Network=pytroll.network
+Volume={{ install_dir }}/config_viirs_h5/:/config/:z
+DNSSearch={{ dns_domain }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
