@@ -1,0 +1,35 @@
+# vim: set filetype=systemd.jinja:
+[Unit]
+Description=sat-wms Service for VIIRS
+After=network-online.target
+
+[Container]
+Image={{ docker_repo }}sat-wms:main
+Pull=missing
+ContainerName=sat-wms-viirs
+Network=pytroll.network
+Volume={{ output_dir }}:/mnt/output/:z
+Secret=pgpassword,type=env,target=PGPASSWORD
+Environment=GDAL_CACHEMAX=512
+Environment=GDAL_NUM_THREADS=ALL_CPUS
+Environment=NUM_THREADS=ALL_CPUS
+Environment=UVICORN_HOST=0.0.0.0
+Environment=UVICORN_PORT=8998
+Environment=UVICORN_WORKERS=4
+Environment=SAT_WMS_FORCE_WEBP=True
+Environment=SAT_WMS_EMPTY_NO_CONTENT=True
+Environment=SAT_WMS_DATABASE_URL=postgresql://postgres@postgis-viirs/postgres
+Environment=SAT_WMS_BASE_URL=https://wms-proxy-staging.int-nordmet-nordsat.s.ewcloud.host/viirs
+Environment=SAT_WMS_WMS_TITLE="Nordsat VIIRS WMS"
+Environment=SAT_WMS_SUPPORTED_CRS="EPSG:3575,EPSG:3857,EPSG:5041,EPSG:4326,EPSG:3301"
+Environment=SAT_WMS_LAYER_NAME_PREFIX="VIIRS "
+Environment=SAT_WMS_PRODUCTS_TABLE_NAME=public.{{ pg_table_name }}
+User=0
+DNSSearch={{ dns_domain }}
+PublishPort=8998:8998
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

@@ -1,4 +1,8 @@
-install_dir: "{{ ansible_env.HOME }}/wms"
-input_dir: /eodata/viirs_out/
-map_dir: /eodata/viirs_maps/
+install_dir: "{{ ansible_env.HOME }}/viirs-wms"
+output_dir: /eodata/viirs_out/
 pg_table_name: products_viirs
+docker_repo: docker.io/mraspaud/
+dns_domain: ""
+# cleaning of the output directory
+clean_threshold_gb: 70
+postgis_container: postgis-viirs

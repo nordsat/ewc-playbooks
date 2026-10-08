@@ -4,8 +4,6 @@ pg_user_name: postgres
 pg_database_name: postgres
 pg_host_name: postgis-viirs
 host_name: postgis-viirs
-mapfile_include_layers_filename: /usr/local/bin/db-sync/output/mapfile_layers.map
-time_slot_interval_in_minutes: list
 
 subscriber_settings:
   nameserver: false

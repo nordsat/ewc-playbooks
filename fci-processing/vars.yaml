@@ -4,4 +4,38 @@ output_dir: /eodata/fci_out/
 config_repo: https://github.com/nordsat/ewc-config.git
 docker_repo: docker.io/mraspaud/
 dns_domain: ""
-message_source: tcp://trollstalker-fci:10000
+quadlet_dir: "/etc/containers/systemd/users/{{ user_id_result.stdout }}"
+
+# Segment gatherer
+with_hrfi: false
+
+# Images
+trollflow2_image: "trollflow2:main-mamba"
+segment_gatherer_image: "segment-gatherer:main"
+dispatcher_image: "dispatcher:main"
+
+# Where each stack writes its images, on the host and inside the containers.
+# The dispatcher has to see a stack's output under the same path the producing
+# trollflow2 published it under, so these two always travel together.
+stack_outputs:
+  main:
+    dir: /san1/fci/out
+    mount: /mnt/output/
+  fm:
+    dir: /san1/fci/out_fm
+    mount: /mnt/output_fm/
+  heavy:
+    dir: /san1/fci/out_heavy
+    mount: /mnt/output_heavy/
+
+# Volumes and environment shared by every trollflow2 instance.  Instances that
+# need a different product list mount it on top of /config/trollflow2.yaml.
+trollflow2_volumes:
+  - "{{ install_dir }}/config_fci_nc/:/config/:z"
+  - "{{ input_dir }}:/mnt/input/:z"
+  - "{{ output_dir }}:{{ output_mount }}:z"
+  - "{{ install_dir }}/local/:/.local/:z"
+
+trollflow2_environment:
+  GDAL_NUM_THREADS: ALL_CPUS
+  NUM_THREADS: ALL_CPUS

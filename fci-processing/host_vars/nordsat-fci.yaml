@@ -1,0 +1,4 @@
+---
+# ansible_become_user: root
+
+message_source: tcp://10.0.0.139:9295
